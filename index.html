@@ -1203,7 +1203,7 @@ function App() {
                   </div>
                   <div style={{ padding: "0 10px 10px" }}>
                     {loading2 && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>SEARCHING CIRCUIT</span></div>}
-                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#fff" }}><img src={svg} alt={trackName} style={{ width: "100%", height: "auto", display: "block" }} /></div>}
+                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#fff" }}><img src={svg} alt={track} style={{ width: "100%", height: "auto", display: "block" }} /></div>}
                     {svg === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Map not found on Wikimedia</div>}
                     {!svg && !loading2 && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>No map loaded yet</div>}
                   </div>
