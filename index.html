@@ -686,11 +686,21 @@ function App() {
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am })
       });
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d.error) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "API Error: " + (d.error.message || JSON.stringify(d.error)) }]); }); return; }
-      var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n") || "No response.";
+    }).then(function(r) {
+      return r.json().catch(function() { return { _httpStatus: r.status, message: "Resposta inválida do servidor (HTTP " + r.status + ")" }; })
+        .then(function(d) { d._httpStatus = d._httpStatus || r.status; return d; });
+    }).then(function(d) {
+      // Anthropic error: { error: { message } }
+      // Supabase function error: { message } or { error }
+      var errMsg = null;
+      if (d.error) errMsg = (typeof d.error === "object" ? d.error.message : d.error) || JSON.stringify(d.error);
+      else if (d._httpStatus && d._httpStatus !== 200) errMsg = d.message || ("HTTP " + d._httpStatus);
+      else if (d.message && !d.content) errMsg = d.message;
+      if (errMsg) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + errMsg }]); }); return; }
+      var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
+      if (!txt) txt = "Resposta vazia. Verifique se a Edge Function está deployada e o secret ANTHROPIC_API_KEY está configurado no Supabase.";
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
-    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + e.message }]); }); })
+    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro de conexão: " + e.message }]); }); })
     .finally(function() { setLoading(false); });
   }
 
