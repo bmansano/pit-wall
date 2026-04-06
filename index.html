@@ -376,7 +376,7 @@ function AuthScreen({ onLogin, initialMode }) {
               </div>
             )}
             {mode === "register" && (
-              <p style={{ fontSize: 11, color: C.td, marginBottom: 18, lineHeight: 1.5 }}>Você também precisará configurar sua API key da Anthropic no app após o login.</p>
+              <p style={{ fontSize: 11, color: C.td, marginBottom: 18, lineHeight: 1.5 }}>Após criar a conta, você terá acesso completo ao PIT WALL.</p>
             )}
             {error && (
               <div style={{ marginBottom: 14, padding: "9px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 4, color: "#f87171", fontSize: 12 }}>{error}</div>
@@ -429,9 +429,6 @@ function App() {
   var _setups = useState([]); var savedSetups = _setups[0]; var setSavedSetups = _setups[1];
   var _selSetup = useState(null); var selectedSetup = _selSetup[0]; var setSelectedSetup = _selSetup[1];
   var _historyGame = useState(null); var historyGame = _historyGame[0]; var setHistoryGame = _historyGame[1];
-  // API Key
-  var _apiKey = useState(localStorage.getItem("pitwall_api_key") || ""); var apiKey = _apiKey[0]; var setApiKey = _apiKey[1];
-  var _showKey = useState(!localStorage.getItem("pitwall_api_key")); var showKeyInput = _showKey[0]; var setShowKeyInput = _showKey[1];
   // Track maps cache (in-memory + localStorage)
   var _tmaps = useState(function() {
     try {
@@ -678,20 +675,22 @@ function App() {
 
   function sendMsg(msg) {
     if (!msg.trim()) return;
-    if (!apiKey) { setShowKeyInput(true); return; }
     var nm = messages.concat([{ role: "user", content: msg }]);
     setMessages(nm); setInput(""); setLoading(true);
     var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
     if (nm.length === 1) am[0].content = "[Driver]: " + msg;
-    fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am })
+    window.sb.auth.getSession().then(function(sessionRes) {
+      var token = (sessionRes.data && sessionRes.data.session) ? sessionRes.data.session.access_token : '';
+      return fetch(window.SB_URL + "/functions/v1/anthropic-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am })
+      });
     }).then(function(r) { return r.json(); }).then(function(d) {
       if (d.error) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "API Error: " + (d.error.message || JSON.stringify(d.error)) }]); }); return; }
       var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n") || "No response.";
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
-    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Error: " + e.message }]); }); })
+    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + e.message }]); }); })
     .finally(function() { setLoading(false); });
   }
 
@@ -704,7 +703,6 @@ function App() {
     }, 80);
   }
 
-  function saveApiKey() { localStorage.setItem("pitwall_api_key", apiKey); setShowKeyInput(false); }
 
   function getSetupTxt(msgs) { return msgs.filter(function(m) { return m.role === "assistant"; }).map(function(m) { return m.content; }).join("\n\n---\n\n"); }
   function exportTxt(s) {
@@ -778,13 +776,6 @@ function App() {
           }}>DISCARD SESSION</button>
         )}
 
-        {/* API status */}
-        <button onClick={function() { setShowKeyInput(!showKeyInput); }} style={{
-          padding: "5px 12px", background: "transparent", marginRight: 6,
-          border: "1px solid " + (apiKey ? C.bd : C.danger), borderRadius: 3,
-          color: apiKey ? C.ok : C.danger, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1,
-        }}>{apiKey ? "● API ACTIVE" : "○ SET API KEY"}</button>
-
         {/* Logout */}
         <button onClick={function() { window.sb.auth.signOut(); }} style={{
           padding: "5px 10px", background: "transparent",
@@ -830,30 +821,6 @@ function App() {
     </div>
   );
   if (!user) return <AuthScreen onLogin={function(u) { setUser(u); }} />;
-
-  // ── API KEY ─────────────────────────────────────────────────────────────────
-  if (showKeyInput) {
-    return (
-      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
-        <Header />
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: C.bg }}>
-          <div style={{ width: 440, background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "36px 40px" }}>
-            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.ac, marginBottom: 8 }}>CONFIGURAÇÃO</div>
-            <h2 style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 20, color: C.tx, marginBottom: 14 }}>Anthropic API Key</h2>
-            <p style={{ color: C.ts, fontSize: 13, marginBottom: 24, lineHeight: 1.65 }}>
-              Para usar o PIT WALL localmente, você precisa de uma API key da Anthropic.{" "}
-              <a href="https://console.anthropic.com/" target="_blank" style={{ color: C.ac, textDecoration: "none" }}>console.anthropic.com</a>
-            </p>
-            <input type="password" value={apiKey} onChange={function(e) { setApiKey(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && apiKey.trim()) saveApiKey(); }} placeholder="sk-ant-..."
-              style={{ width: "100%", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 14, marginBottom: 16, boxSizing: "border-box" }} />
-            <button onClick={saveApiKey} disabled={!apiKey.trim()} style={{ width: "100%", padding: "12px", background: apiKey.trim() ? C.ac : C.bd, border: "none", borderRadius: 4, color: apiKey.trim() ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: apiKey.trim() ? "pointer" : "not-allowed", textTransform: "uppercase" }}>SALVAR E CONTINUAR</button>
-            <p style={{ color: C.td, fontSize: 11, marginTop: 12, textAlign: "center" }}>Salvo apenas localmente no seu navegador.</p>
-          </div>
-        </div>
-        <Toast /><DiscardModal />
-      </div>
-    );
-  }
 
   // ── CONFIG ──────────────────────────────────────────────────────────────────
   if (step === "config") {
@@ -1015,7 +982,7 @@ function App() {
     if (selectedSetup) {
       // Auto-fetch map when detail opens
       var _mapKey = (selectedSetup.gameKey || "") + "||" + selectedSetup.track;
-      if (!trackMaps[_mapKey] && trackMapLoading !== _mapKey && apiKey) {
+      if (!trackMaps[_mapKey] && trackMapLoading !== _mapKey) {
         setTimeout(function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }, 0);
       }
       // Detail view
