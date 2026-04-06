@@ -679,28 +679,16 @@ function App() {
     setMessages(nm); setInput(""); setLoading(true);
     var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
     if (nm.length === 1) am[0].content = "[Driver]: " + msg;
-    window.sb.auth.getSession().then(function(sessionRes) {
-      var token = (sessionRes.data && sessionRes.data.session) ? sessionRes.data.session.access_token : '';
-      return fetch(window.SB_URL + "/functions/v1/anthropic-proxy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am })
-      });
-    }).then(function(r) {
-      return r.json().catch(function() { return { _httpStatus: r.status, message: "Resposta inválida do servidor (HTTP " + r.status + ")" }; })
-        .then(function(d) { d._httpStatus = d._httpStatus || r.status; return d; });
-    }).then(function(d) {
-      // Anthropic error: { error: { message } }
-      // Supabase function error: { message } or { error }
-      var errMsg = null;
-      if (d.error) errMsg = (typeof d.error === "object" ? d.error.message : d.error) || JSON.stringify(d.error);
-      else if (d._httpStatus && d._httpStatus !== 200) errMsg = d.message || ("HTTP " + d._httpStatus);
-      else if (d.message && !d.content) errMsg = d.message;
-      if (errMsg) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + errMsg }]); }); return; }
+    window.sb.functions.invoke("anthropic-proxy", {
+      body: { model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am }
+    }).then(function(res) {
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      var d = res.data || {};
+      if (d.error) throw new Error((typeof d.error === "object" ? d.error.message : d.error) || JSON.stringify(d.error));
       var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
-      if (!txt) txt = "Resposta vazia. Verifique se a Edge Function está deployada e o secret ANTHROPIC_API_KEY está configurado no Supabase.";
+      if (!txt) throw new Error("Resposta vazia. Confirme se o secret ANTHROPIC_API_KEY está configurado em Edge Functions → Secrets no Supabase.");
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
-    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro de conexão: " + e.message }]); }); })
+    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + e.message }]); }); })
     .finally(function() { setLoading(false); });
   }
 
