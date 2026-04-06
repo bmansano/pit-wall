@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIT WALL — Sim Racing Setup Engineer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  body { background: #0a0a0b; overflow: hidden; font-family: 'Chakra Petch', sans-serif; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #252530; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #30303c; }
+  button { cursor: pointer; transition: background 0.1s, border-color 0.1s, color 0.1s; font-family: inherit; }
+  input, textarea { font-family: inherit; }
+  button:disabled { cursor: not-allowed; }
+  input:focus, textarea:focus { outline: none !important; border-color: #f97316 !important; }
+  input::placeholder, textarea::placeholder { color: #3a3a44; }
+  .toast-enter { animation: toastIn 0.2s ease; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
+// Cole aqui os valores do seu projeto Supabase (Settings → API):
+window.SB_URL  = "https://hugxfbcyyfltloufbgna.supabase.co";
+window.SB_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3hmYmN5eWZsdGxvdWZiZ25hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTE0ODYsImV4cCI6MjA5MTA2NzQ4Nn0.Xn-5ej7WPSwenlu-M5e0OvZiuEATztb7_FUeeAxLZ5Q";
+
+if (window.SB_URL !== "YOUR_SUPABASE_URL") {
+  window.sb = supabase.createClient(window.SB_URL, window.SB_KEY);
+}
+</script>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+const storage = {
+  get: function(key) { return new Promise(function(r) { try { var v = localStorage.getItem(key); r(v ? { value: v } : null); } catch(e) { r(null); } }); },
+  set: function(key, value) { return new Promise(function(r) { try { localStorage.setItem(key, value); r({ key, value }); } catch(e) { r(null); } }); },
+};
+window.storage = storage;
+
+const GAMES = {
+  ams2: {
+    name: "Automobilista 2", short: "AMS2",
+    categories: {
+      gt3_modern: { name: "GT3 (Gen 2)", cars: ["Mercedes-AMG GT3 Evo","BMW M4 GT3","Porsche 992 GT3 R","McLaren 720S GT3 EVO","Aston Martin Vantage GT3 Evo"] },
+      gt3_classic: { name: "GT3 (Gen 1)", cars: ["Mercedes-AMG GT3","BMW M6 GT3","Porsche 911 GT3 R (991)","McLaren 720S GT3","Nissan GT-R Nismo GT3"] },
+      gt4: { name: "GT4", cars: ["Mercedes-AMG GT4","BMW M4 GT4","Porsche 718 Cayman GT4 CS MR","McLaren 570S GT4","Aston Martin Vantage GT4","Ginetta G55 GT4","Camaro GT4.R"] },
+      gt_open: { name: "GT Open", cars: ["Ginetta G55 GT3","Ultima GTR Race"] },
+      gt1: { name: "GT1", cars: ["McLaren F1 GTR Longtail","Mercedes-Benz CLK LM","Porsche 911 GT1","Nissan R390 GT1"] },
+      gte: { name: "GTE", cars: ["Porsche 911 RSR-19","Chevrolet Corvette C8.R","BMW M8 GTE"] },
+      lmdh: { name: "LMDh / Hypercar", cars: ["Porsche 963","Cadillac V-Series.R","BMW M Hybrid V8","Alpine A242","Lamborghini SC63"] },
+      prototype: { name: "Prototype (P2 / DPi / Group C)", cars: ["Cadillac DPi","Ginetta G58","Porsche 962C","Nissan R89C","Sauber C9","Corvette GTP (Group C)"] },
+      brazilian_endurance: { name: "Brazilian Endurance (Império)", cars: ["MetalMoro AJR Chevy (P1)","MetalMoro AJR Honda (P1)","MetalMoro AJR Judd (P1)","MetalMoro AJR V6 (P1)","Sigma P1 (P2)","MCR S2000 (P4)","MetalMoro MRX Duratec (P2)","MetalMoro MRX Duratec (P3)","MetalMoro MRX Duratec (P4)","MetalMoro MRX Honda (P3)","Roco 001 (P3)"] },
+      formula_modern: { name: "Formula Modern", cars: ["F-Ultimate Gen 1","F-Ultimate Gen 2","F-Hybrid Gen 1 (NEW v1.6.9.5)","F-Hybrid Gen 2","F-Hybrid Gen 3","F-V10 Gen 2","F-Reiza"] },
+      formula_90s: { name: "Formula 90s", cars: ["F-Edge Model 1 (V12) (NEW v1.6.9.5)","F-Edge Model 2 (V10) (NEW v1.6.9.5)","F-Edge Model 3 (V8) (NEW v1.6.9.5)","F-V10 Gen 1","McLaren MP4/12","McLaren MP4/6","McLaren MP4/5B","F-Classic Gen 3 Model 1","F-Classic Gen 3 Model 2","F-Classic Gen 3 Model 3","F-Classic Gen 3 Model 4","F-Classic Gen 4 Model 1","F-Classic Gen 4 Model 2","F-Classic Gen 4 Model 3"] },
+      formula_80s: { name: "Formula 80s", cars: ["McLaren MP4/4","Lotus 98T","Brabham BT52","McLaren MP4/1C","F-Retro Gen 3 DFY","F-Retro Gen 3 Turbo","F-Classic Gen 1 Model 1","F-Classic Gen 1 Model 2","F-Classic Gen 2 Model 1","F-Classic Gen 2 Model 2","F-Classic Gen 2 Model 3"] },
+      formula_70s: { name: "Formula 70s", cars: ["Lotus 72E","Lotus 79","McLaren M23","Brabham BT44","Brabham BT46B","Brabham BT49","F-Retro Gen 1 V12","F-Retro Gen 1 V8","F-Retro Gen 2"] },
+      formula_60s: { name: "Formula 60s", cars: ["Lotus 49C","Brabham BT26A","F-Vintage Gen 1 Model 1","F-Vintage Gen 1 Model 2","F-Vintage Gen 2 Model 1","F-Vintage Gen 2 Model 2"] },
+      formula_usa: { name: "Formula USA (IndyCar/ChampCar)", cars: ["Formula USA 2023","Reynard 2Ki Ford","Reynard 2Ki Honda","Reynard 2Ki Mercedes","Reynard 2Ki Toyota","Reynard 98i Ford","Reynard 98i Honda","Reynard 98i Mercedes","Reynard 98i Toyota","Reynard 95i Ford","Reynard 95i Honda","Reynard 95i Mercedes","Lola BK200 Ford","Lola BK200 Mercedes","Lola BK200 Toyota","Lola T95/00 Ford","Lola T95/00 Mercedes","Lola T98/00 Ford","Swift 009C Ford"] },
+      formula_entry: { name: "Formula Entry", cars: ["Formula Trainer Simple","Formula Trainer Advanced","Formula Junior","Formula Inter MG-15","Formula Vee '11","Formula Vee Fin","Dallara F301","Dallara F309"] },
+      stock_car_brasil: { name: "Stock Car Brasil", cars: ["Chevrolet Cruze Stock Car '24","Chevrolet Cruze Stock Car '23","Chevrolet Cruze Stock Car '22","Chevrolet Cruze Stock Car '21","Chevrolet Cruze Stock Car '20","Chevrolet Cruze Stock Car '19","Toyota Corolla Stock Car '24","Toyota Corolla Stock Car '23","Toyota Corolla Stock Car '22","Toyota Corolla Stock Car '21","Toyota Corolla Stock Car '20","Chevrolet Omega Stock Car '99"] },
+      stock_usa: { name: "Stock Car USA", cars: ["Stock USA Gen 1","Stock USA Gen 2","Stock USA Gen 3","Stock USA Gen 3 LM"] },
+      touring: { name: "Touring / V8", cars: ["Super V8 (Gen2 ZB)","Mini Cooper JCW","Aussie Racing Camaro"] },
+      copa_truck: { name: "Copa Truck", cars: ["Volkswagen Constellation","Mercedes-Benz Actros","Iveco Stralis","MAN TGX","Vulkan Truck"] },
+      karting: { name: "Karting", cars: ["GX390 Rental Kart","GX390 Race Kart","125cc Kart","125cc Shifter Kart","250cc Super Kart"] },
+      porsche_cup: { name: "Porsche Carrera Cup", cars: ["Porsche 911 GT3 Cup 3.8","Porsche 911 GT3 Cup 4.0"] },
+      ginetta_cup: { name: "Ginetta Cup", cars: ["Ginetta G40 Cup","Ginetta G55 Supercup"] },
+      caterham: { name: "Caterham", cars: ["Caterham Academy (270R)","Caterham Supersport (360R)","Caterham Superlight (360R)","Caterham 620R"] },
+      supercars: { name: "Road Cars / Supercars", cars: ["McLaren Senna","Brabham BT62","McLaren F1 LM","Aston Martin Valkyrie","Corvette C8 Z06","Ultima GTR","Camaro SS","VW Polo","VW Polo GTS","VW Virtus","VW Virtus GTS"] },
+      gt5: { name: "GT5", cars: ["Ginetta G40 GT5","Puma P052 GT5"] },
+      brazilian_classics: { name: "Brazilian Classics / Historics", cars: ["Chevrolet Opala '79","Chevrolet Opala '86","Old Stock Opala","Fiat Uno (Copa Uno)","VW Fusca","VW Fusca HC1","VW Fusca HC2","VW Gol","VW Passat","Chevrolet Chevette CCB","Chevrolet Montana","Sprint Race","Mitsubishi Lancer R","Mitsubishi Lancer RS","BMW M1 Procar"] },
+      vintage_tc: { name: "Vintage Touring Cars", cars: ["BMW 2002 Turbo","Mini Cooper S","Lotus 23","Chevrolet Corvette C3","Chevrolet Corvette C3 R","Mercedes-Benz 190E EVO 2 DTM (Group A)","BMW M3 Sport Evo Group A"] },
+      gt1_2005: { name: "Endurance 2005", cars: ["GT1 2005 cars","GT2 2005 cars","GTR 2005 cars","LMP1 2005 cars","LMP2 2005 cars"] },
+      ligier: { name: "Ligier", cars: ["Ligier JS2-R","Ligier P4"] },
+      lambo: { name: "Lamborghini", cars: ["Lamborghini Huracán Super Trofeo","Lamborghini Diablo Super Trophy"] },
+    },
+    tracks: ["Interlagos","Spa-Francorchamps","Nürburgring GP","Nürburgring Nordschleife","Nürburgring Nordschleife Tourist","Nürburgring 24H","Nürburgring 1971","Monza","Monza 1971 (with banking)","Silverstone GP","Silverstone International","Silverstone National","Brands Hatch GP","Brands Hatch Indy","Bathurst (Mount Panorama)","Imola","Suzuka","Kyalami","Donington Park GP","Donington Park National","Snetterton 300","Snetterton 200","Oulton Park International","Oulton Park Fosters","Cadwell Park","Goiânia","Cascavel","Curitiba","Velopark","Londrina","Santa Cruz do Sul","Salvador","Curvelo","Velocittá","Spielberg (Red Bull Ring)","Spielberg Historic","Hungaroring","Jerez","Barcelona-Catalunya","Barcelona-Catalunya 1991 (Chicane)","Hockenheimring GP","Hockenheimring National","Zolder","Zandvoort","Buenos Aires No.6","Buenos Aires No.6S","Buenos Aires No.8","Buenos Aires No.15","Watkins Glen","Long Beach","Azure Circuit (Monaco)","Le Mans (Circuit de la Sarthe)","Laguna Seca","Daytona Road Course","Daytona Tri-Oval","Sebring","Road America","Mid-Ohio","Adelaide 1988","Adelaide 1991","Indianapolis Road Course","Indianapolis Oval","Pocono Raceway","Fontana Oval","Fontana Oval Historic","Jacarepaguá","Tarumã","Guaporé"],
+  },
+  iracing: {
+    name: "iRacing", short: "iRacing",
+    categories: {
+      gt3: { name: "GT3", cars: ["Mercedes-AMG GT3 EVO","BMW M4 GT3","Porsche 911 GT3 R (992)","McLaren 720S GT3 EVO","Audi R8 LMS GT3 EVO II","Lamborghini Huracán GT3 EVO2","Ferrari 296 GT3","Aston Martin Vantage GT3","Ford Mustang GT3"] },
+      gt4: { name: "GT4", cars: ["Mercedes-AMG GT4","BMW M4 GT4","Porsche 718 Cayman GT4 Clubsport MR","McLaren 570S GT4","Aston Martin Vantage GT4"] },
+      gtp: { name: "GTP / LMDh", cars: ["Porsche 963 GTP","Cadillac V-Series.R GTP","BMW M Hybrid V8 GTP","Acura ARX-06 GTP"] },
+      lmp2: { name: "LMP2", cars: ["Dallara P217 LMP2"] },
+      lmp1: { name: "LMP1", cars: ["Audi R18","Porsche 919 Hybrid"] },
+      gte: { name: "GTE", cars: ["BMW M8 GTE","Ferrari 488 GTE","Porsche 911 RSR","Corvette C8.R GTE"] },
+      tcr: { name: "TCR", cars: ["Audi RS 3 LMS Gen 2 TCR","Honda Civic Type-R TCR","Hyundai Elantra N TCR","Hyundai Veloster N TCR"] },
+      nascar_cup: { name: "NASCAR Cup Series (Next Gen)", cars: ["Chevrolet Camaro ZL1","Ford Mustang","Toyota Camry"] },
+      nascar_xfinity: { name: "NASCAR Xfinity Series", cars: ["Chevrolet Camaro","Ford Mustang","Toyota Supra"] },
+      nascar_truck: { name: "NASCAR Craftsman Truck Series", cars: ["Chevrolet Silverado","Ford F-150","Toyota Tundra","RAM 1500 (NEW 2026 S2)"] },
+      nascar_classic: { name: "NASCAR Classics & ARCA", cars: ["ARCA Menards Chevrolet","Gen 4 Chevrolet Monte Carlo","Gen 4 Ford Taurus","1987 NASCAR Stock Car"] },
+      indycar: { name: "IndyCar / Indy Lights", cars: ["Dallara IR-18","Dallara IL-15 (Indy Lights)"] },
+      formula_road: { name: "Formula / Open Wheel (Road)", cars: ["Dallara F3","Super Formula SF23","Formula Vee","Ray FF1600","Skip Barber Formula 2000","USF 2000","FIA Cross Car (FREE)"] },
+      porsche_cup: { name: "Porsche Cup", cars: ["Porsche 911 GT3 Cup (992.2) (NEW 2026 S1)","Porsche 911 GT3 Cup (992)"] },
+      touring_sports: { name: "Touring & Sports Cars", cars: ["Mazda MX-5 Cup (ND)","Mazda MX-5 Cup (NC)","Toyota GR86","Hyundai Elantra N TC","BMW M2 CS Racing","Porsche 718 Cayman GT4 Clubsport MR"] },
+      supercars: { name: "Supercars (Australia)", cars: ["Supercars Gen 3 Chevrolet Camaro","Supercars Gen 3 Ford Mustang"] },
+      stockcar_brasil: { name: "Stock Car Pro Series (Brazil)", cars: ["Chevrolet Cruze Stock Car","Toyota Corolla Stock Car"] },
+      oval_short: { name: "Oval / Short Track", cars: ["Late Model Stock","Super Late Model","Street Stock","Legends Ford '34 Coupe","Silver Crown","SK/Tour Modified"] },
+      kamel_gt: { name: "IMSA Vintage (Kamel GT)", cars: ["Audi 90 GTO","Ford Mustang FR500S","Nissan GTP ZX-T"] },
+      dirt_oval: { name: "Dirt Oval", cars: ["World of Outlaws Sprint Car","World of Outlaws Late Model","USAC Sprint Car","Dirt Midget","Dirt Street Stock","Dirt UMP Modified","Dirt Pro Late Model","DIRTcar 358 Modified"] },
+      rallycross: { name: "Rallycross / Dirt Road", cars: ["Volkswagen Beetle GRC","Subaru WRX STI","Ford Fiesta RS WRC","FIA Cross Car (FREE)","Lucas Oil Off Road Pro2","Lucas Oil Off Road Pro4","Lucas Oil Off Road Pro Lite"] },
+    },
+    tracks: ["Daytona International Speedway (Road)","Daytona International Speedway (Oval)","Spa-Francorchamps","Nürburgring GP","Nürburgring Nordschleife","Nürburgring Combined","Monza","Silverstone","Suzuka","Interlagos","Circuit of the Americas (COTA)","Watkins Glen","Road America","Laguna Seca","Sebring International Raceway","Mid-Ohio Sports Car Course","VIR (Virginia International Raceway)","Long Beach Street Circuit","St. Petersburg Street Circuit (NEW 2026 S2)","Mount Panorama (Bathurst)","Imola","Barcelona-Catalunya","Hungaroring","Hockenheimring GP","Red Bull Ring","Zandvoort","Brands Hatch GP","Donington Park GP","Oulton Park","Snetterton 300","Fuji Speedway","Motegi (Twin Ring)","Okayama International Circuit","Phillip Island","Tsukuba","Le Mans (Circuit de la Sarthe)","Indianapolis Motor Speedway (Road)","Indianapolis Motor Speedway (Oval)","Talladega Superspeedway","Charlotte Motor Speedway (Oval)","Charlotte Motor Speedway (Roval)","Martinsville Speedway","Bristol Motor Speedway","Phoenix Raceway","Kansas Speedway","Michigan International Speedway","Texas Motor Speedway","Homestead-Miami Speedway","Darlington Raceway","Richmond Raceway","Nashville Superspeedway","Iowa Speedway","Las Vegas Motor Speedway","New Hampshire Motor Speedway","Pocono Raceway","Rockingham Speedway","North Wilkesboro Speedway","Chicago Street Course","Adelaide Street Circuit (NEW 2026 S1)","Miami International Autodrome (NEW 2026 S1)","Barber Motorsports Park (Rescan 2026 S2)","Sandown Raceway","Winton Motor Raceway","South Boston Speedway","Lanier Raceway","USA International Speedway","Summit Point","Lime Rock Park","Mosport (Canadian Tire Motorsport Park)","Road Atlanta","Sonoma Raceway","Detroit Grand Prix","Knockhill","Mugello","WeatherTech Raceway Laguna Seca","Mount Washington Hillclimb","Crandon International Raceway","Eldora Speedway","Williams Grove Speedway","Knoxville Raceway","Volusia Speedway Park","Limaland Motorsports Park","Lucas Oil Speedway"],
+  },
+  acc_evo: {
+    name: "Assetto Corsa EVO", short: "AC EVO",
+    categories: {
+      gt3: { name: "GT3 / GT Racing", cars: ["BMW M4 GT3 Evo","Ferrari 296 GT3","Ford Mustang GT3","Lamborghini Huracán Super Trofeo EVO 2","Ferrari 488 Challenge Evo"] },
+      gt2: { name: "GT2", cars: ["Mercedes-AMG GT2","Maserati GT2 (MC20)"] },
+      cup: { name: "Cup / One-Make", cars: ["Porsche 911 GT3 Cup (992)","Porsche 718 Cayman GT4 Clubsport","BMW M2 CS Racing","Mazda MX-5 ND Global Cup","Caterham Seven Academy","Caterham Seven 485 CSR"] },
+      formula: { name: "Formula", cars: ["Ferrari F2004","Ferrari SF-25"] },
+      modern_performance: { name: "Modern Performance", cars: ["Ferrari 296 GTB","Ferrari Daytona SP3","Porsche 911 GT3 (992)","Porsche 911 GT3 RS (992)","Porsche 718 Cayman GT4","Porsche 718 Cayman GT4 RS","BMW M4 CSL","BMW M8 Competition","Chevrolet Camaro ZL1","Chevrolet Camaro ZL1 1LE","Lamborghini Huracán STO","Dallara Stradale","Dallara EXP","Lotus Exige V6 Cup (Series 3)","Lotus Emira V6 First Edition","Alpine A110 S","Hyundai i30 N Performance","Audi RS 3 Sportback","Audi RS 6"] },
+      road_classics: { name: "Road Classics / Heritage", cars: ["Ferrari 288 GTO","Ferrari F40 LM","Alfa Romeo Giulia GTAm","Alfa Romeo Giulia Sprint GTA","Alfa Romeo 75 Turbo Evoluzione","Alfa Romeo Junior Elettrica 280 Veloce","BMW M3 E30 Sport Evolution","BMW M3 E46 CSL","Lancia Delta HF Integrale Evo II","Mercedes-Benz 190E Evo II","Honda NSX-R (NA1)","Honda S2000 (AP1)","Mazda MX-5 (NA)","Ford Escort Cosworth RS","Peugeot 205 T16","Audi Sport quattro (1983)","Lamborghini Countach LP5000 QV","Mini John Cooper S MkVI","Abarth 695 Biposto"] },
+    },
+    tracks: ["Monza","Spa-Francorchamps","Silverstone","Nürburgring GP","Nürburgring Nordschleife","Imola","Barcelona-Catalunya","Zandvoort","Brands Hatch GP","Donington Park","Suzuka","Mount Panorama (Bathurst)","Red Bull Ring","Hungaroring","Mugello","Laguna Seca","Paul Ricard","Misano","Zolder","Kyalami"],
+  },
+  lmu: {
+    name: "Le Mans Ultimate", short: "LMU",
+    categories: {
+      hypercar: { name: "Hypercar / LMDh", cars: ["Toyota GR010 Hybrid","Ferrari 499P","Porsche 963 LMDh","Cadillac V-Series.R LMDh","Peugeot 9X8","BMW M Hybrid V8","Glickenhaus 007 LMH","Alpine A424 LMDh","Lamborghini SC63 LMDh","Isotta Fraschini Tipo6-C LMH","Aston Martin Valkyrie AMR LMH","Genesis GMR-001 LMDh (NEW v1.3)"] },
+      lmgt3: { name: "LMGT3", cars: ["Porsche 911 GT3 R (LMGT3)","Corvette Z06 GT3.R (LMGT3)","Ferrari 296 GT3 (LMGT3)","BMW M4 GT3 (LMGT3)","Aston Martin Vantage AMR GT3 (LMGT3)","McLaren 720S GT3 EVO (LMGT3)","Lamborghini Huracán GT3 EVO2 (LMGT3)","Ford Mustang GT3 (LMGT3)","Lexus RC F GT3 (LMGT3)","Mercedes-AMG GT3 EVO (LMGT3)"] },
+      lmp2: { name: "LMP2", cars: ["Oreca 07 Gibson LMP2","Oreca 07 Gibson LMP2 (ELMS spec)"] },
+      gte: { name: "GTE (2023 Season)", cars: ["Porsche 911 RSR-19 GTE","Corvette C8.R GTE","Ferrari 488 GTE","Aston Martin Vantage AMR GTE"] },
+      lmp3: { name: "LMP3 (ELMS)", cars: ["Ligier JS P325 LMP3","Ginetta G61-LT-P3 Evo LMP3","Duqueine D09 LMP3 (NEW v1.3)"] },
+    },
+    tracks: ["Le Mans (Circuit de la Sarthe)","Monza","Spa-Francorchamps","Imola","Interlagos","Fuji Speedway","Bahrain International Circuit","Circuit of the Americas (COTA)","Portimão (Algarve International Circuit)","Jeddah Corniche Circuit","Lusail International Circuit","Silverstone","São Paulo (Interlagos)","Sebring International Raceway","Paul Ricard","Barcelona-Catalunya (NEW v1.3 - ELMS)"],
+  },
+  rrre: {
+    name: "RaceRoom Racing Experience", short: "R3E",
+    categories: {
+      gtr3: { name: "GTR 3 (GT3)", cars: ["Mercedes-AMG GT3","BMW M6 GT3","BMW Z4 GT3 (2013)","Porsche 911 GT3 R","Audi R8 LMS GT3","Audi R8 LMS Ultra GT3","Bentley Continental GT3","Callaway Corvette GT3-R","Ferrari 488 GT3","McLaren 650S GT3","Nissan GT-R GT3","Lamborghini Huracán GT3"] },
+      gtr2: { name: "GTR 2", cars: ["Mercedes-AMG GT3 (2016)","Bentley Continental GT3 (2016)","Audi R8 LMS (2016)","BMW M6 GT3 (2016)"] },
+      gt4: { name: "GT4", cars: ["BMW M4 GT4","KTM X-BOW GT4","Porsche 718 Cayman GT4","Mercedes-AMG GT4"] },
+      hypercar: { name: "Hypercar", cars: ["Porsche 963","Toyota GR010 Hybrid","Ferrari 499P","Cadillac V-Series.R","Peugeot 9X8","BMW M Hybrid V8","Glickenhaus 007"] },
+      dtm_2020: { name: "DTM Class 1 (2019-2020)", cars: ["Audi RS 5 DTM 2020","BMW M4 DTM 2020"] },
+      dtm_2016: { name: "DTM 2013-2016", cars: ["Audi RS 5 DTM 2016","BMW M4 DTM 2016","Mercedes C63 DTM 2016","Audi RS 5 DTM 2015","BMW M4 DTM 2015","Mercedes C63 DTM 2015","Audi RS 5 DTM 2014","BMW M4 DTM 2014","Mercedes C-Coupé DTM 2014","Audi RS 5 DTM 2013","BMW M3 DTM 2013","Mercedes C-Coupé DTM 2013"] },
+      dtm_2005: { name: "DTM 2003-2005", cars: ["AMG-Mercedes CLK DTM 2003","Abt-Audi TT-R DTM 2002","AMG-Mercedes CLK-DTM 2002","Opel Astra V8 Coupé DTM 2003","AMG-Mercedes C-Klasse DTM 2005"] },
+      dtm_1995: { name: "DTM 1995", cars: ["AMG-Mercedes C-Klasse DTM 1995","Alfa Romeo 155 TI DTM 1995","Opel Calibra DTM 1995"] },
+      wtcr: { name: "WTCR / WTCC / TCR", cars: ["Lynk & Co 03 TCR","Hyundai Elantra N TCR","Hyundai i30 N TCR","Audi RS 3 LMS TCR","Honda Civic Type-R TCR","Cupra Leon Competición TCR","SEAT León TCR","Volkswagen Golf GTI TCR","Alfa Romeo Giulietta TCR","Honda Civic WTCC 2017","Honda Civic WTCC 2014","Chevrolet Cruze WTCC 2014","Lada Vesta WTCC 2015","Citroën C-Elysée WTCC","Volvo S60 Polestar TC1"] },
+      super_touring: { name: "Super Touring (1990s)", cars: ["Alfa Romeo 156 Super Touring","Audi A4 Quattro Super Touring","BMW 320i E36 Super Touring","Ford Mondeo Super Touring","Honda Accord Super Touring","Nissan Primera Super Touring","Opel Vectra Super Touring","Peugeot 406 Super Touring","Volvo S40 Super Touring"] },
+      group_c: { name: "Group C", cars: ["Nissan R89C","Sauber-Mercedes C9"] },
+      group_5: { name: "Group 5", cars: ["BMW 320 Turbo Group 5","Ford Zakspeed Capri Group 5"] },
+      gto_classics: { name: "GTO Classics", cars: ["Ford Mustang IMSA GTO","Nissan 300ZX Z32 GTO","Audi 90 Quattro IMSA GTO"] },
+      formula: { name: "Open Wheelers", cars: ["Tatuus F4 T-014","Formula RaceRoom 90","Formula RaceRoom 2","Formula RaceRoom 3","Formula RaceRoom X-17","Formula RaceRoom Junior"] },
+      cup_races: { name: "Cup Cars & One-Make", cars: ["Audi TT Cup 2015","Audi TT Cup 2016","BMW M235i Racing Cup","Alpine A110 Cup (FREE - NEW Q1 2026)","Aquila CR1 Cup","Canhard DV21"] },
+      vintage: { name: "Vintage / Classics", cars: ["Mercedes-Benz 190E 2.5-16 EVO II DTM","BMW M1 Procar","BMW 2002 Turbo","Ford Capri RS 3100"] },
+      truck: { name: "Racing Truck", cars: ["Iveco S-Way R Truck"] },
+    },
+    tracks: ["Spa-Francorchamps (NEW Q1 2026)","Nürburgring GP","Nürburgring Nordschleife","Nürburgring Combined (24H)","Monza","Silverstone GP","Silverstone Classics","Brands Hatch GP","Brands Hatch Indy","Hungaroring","Red Bull Ring","Hockenheimring GP","Hockenheimring National","Hockenheimring Short","Zolder","Zandvoort","Norisring","Sachsenring","Lausitzring","Oschersleben","Portimão","Estoril","Salzburgring","Macau","Bathurst (Mount Panorama)","Suzuka","Chang International Circuit (Buriram)","Dubai Autodrome GP","Imola","Laguna Seca","Watkins Glen","Mid-Ohio","Road America","COTA (Circuit of the Americas)","Indianapolis GP","Sepang","Lakeview Hillclimb","Bilster Berg","RaceRoom Raceway","Daytona Road Course","Vallelunga (NEW Q1 2026)","Adria 2003 (NEW Q1 2026)","Adria 2021 (NEW Q1 2026)"],
+  },
+};
+
+const CONDITIONS = ["Dry", "Wet", "Mixed / Drying", "Mixed / Wetting"];
+
+// Palette — readable contrast
+const C = {
+  bg: "#0a0a0b", sf: "#0f0f12", sfh: "#141418", sfc: "#121215",
+  bd: "#1e1e26", bdh: "#282832",
+  ac: "#f97316", acd: "#ea580c", acg: "rgba(249,115,22,0.10)", acs: "rgba(249,115,22,0.06)", acb: "#fb923c",
+  tx: "#dcdce2",     // primary — light
+  ts: "#a8a8b4",     // secondary — readable mid
+  tm: "#707078",     // tertiary — dim but usable
+  td: "#46464e",     // label
+  warn: "#f59e0b", danger: "#ef4444", ok: "#22c55e",
+};
+
+function Loader() {
+  var _s = useState(0); var d = _s[0]; var setD = _s[1];
+  useEffect(function() { var iv = setInterval(function() { setD(function(p) { return (p + 1) % 4; }); }, 280); return function() { clearInterval(iv); }; }, []);
+  return <span style={{ color: C.ac, letterSpacing: 4, fontSize: 11, fontFamily: "monospace" }}>{"■".repeat(d + 1)}</span>;
+}
+
+function renderMd(text) {
+  return text.split("\n").map(function(l, i) {
+    if (l.startsWith("### ")) return <h4 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, margin: "16px 0 6px", textTransform: "uppercase", letterSpacing: 2 }}>{l.slice(4)}</h4>;
+    if (l.startsWith("## ")) return <h3 key={i} style={{ color: C.tx, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, margin: "22px 0 8px", borderBottom: "1px solid " + C.bd, paddingBottom: 7 }}>{l.slice(3)}</h3>;
+    if (l.startsWith("# ")) return <h2 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 17, margin: "26px 0 10px" }}>{l.slice(2)}</h2>;
+    var b = l.replace(/\*\*(.+?)\*\*/g, '<strong style="color:' + C.tx + '">' + "$1" + '</strong>');
+    if (l.startsWith("- ") || l.startsWith("* ")) return (<div key={i} style={{ display: "flex", gap: 9, marginLeft: 8, lineHeight: 1.75, fontSize: 13.5, color: C.ts }}><span style={{ color: C.ac, flexShrink: 0 }}>›</span><span dangerouslySetInnerHTML={{ __html: b.replace(/^[-*] /, "") }} /></div>);
+    if (l.startsWith("|") && l.endsWith("|")) {
+      if (l.includes("---")) return null;
+      var cells = l.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim(); });
+      return (<div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(" + cells.length + ", 1fr)", gap: 1, marginBottom: 1 }}>{cells.map(function(cell, ci) { return (<div key={ci} style={{ background: ci === 0 ? C.acs : C.sfh, padding: "6px 11px", fontSize: 12.5, fontWeight: ci === 0 ? 500 : 400, color: ci === 0 ? C.acb : C.ts, borderLeft: ci === 0 ? "2px solid " + C.ac : "none" }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />); })}</div>);
+    }
+    if (l.startsWith("```")) return null;
+    if (!l.trim()) return <div key={i} style={{ height: 9 }} />;
+    return <p key={i} style={{ margin: "3px 0", lineHeight: 1.75, fontSize: 13.5, color: C.ts }} dangerouslySetInnerHTML={{ __html: b }} />;
+  });
+}
+
+// ── SUPABASE NOT CONFIGURED SCREEN ───────────────────────────────────────────
+function SupabaseSetupScreen() {
+  return (
+    <div style={{ height: "100%", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32, userSelect: "none" }}>
+        <div style={{ width: 36, height: 36, border: "2px solid " + C.ac, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontWeight: 700, fontSize: 11, color: C.ac, letterSpacing: 1 }}>PW</span>
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: 4, color: C.tx, lineHeight: 1 }}>PIT WALL</div>
+          <div style={{ fontSize: 9, fontWeight: 600, color: C.ts, letterSpacing: 2, marginTop: 3 }}>SETUP ENGINEER</div>
+        </div>
+      </div>
+      <div style={{ width: 500, background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "28px 32px" }}>
+        <div style={{ fontSize: 9, letterSpacing: 2, color: C.ac, marginBottom: 8 }}>CONFIGURAÇÃO NECESSÁRIA</div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: C.tx, marginBottom: 16 }}>Supabase não configurado</div>
+        {[
+          "Acesse supabase.com e crie uma conta gratuita",
+          'Clique em "New project" e crie um projeto (qualquer nome)',
+          "Aguarde o projeto ficar pronto (~1 min)",
+          "Vá em Settings → API e copie: Project URL e anon public key",
+          "Em Authentication → URL Configuration, adicione sua URL do GitHub Pages",
+          "Cole os dois valores em window.SB_URL e window.SB_KEY no início do arquivo"
+        ].map(function(s, i) {
+          return (
+            <div key={i} style={{ display: "flex", gap: 12, marginBottom: 10, alignItems: "flex-start" }}>
+              <span style={{ width: 20, height: 20, flexShrink: 0, background: C.acg, border: "1px solid " + C.ac, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: C.ac }}>{i + 1}</span>
+              <span style={{ color: C.ts, fontSize: 13, lineHeight: 1.6 }}>{s}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── AUTH SCREEN ──────────────────────────────────────────────────────────────
+function AuthScreen({ onLogin, initialMode }) {
+  var _mode = useState(initialMode || "login"); var mode = _mode[0]; var setMode = _mode[1];
+  var _email = useState(""); var email = _email[0]; var setEmail = _email[1];
+  var _pw = useState(""); var password = _pw[0]; var setPassword = _pw[1];
+  var _pw2 = useState(""); var password2 = _pw2[0]; var setPassword2 = _pw2[1];
+  var _remember = useState(true); var remember = _remember[0]; var setRemember = _remember[1];
+  var _err = useState(null); var error = _err[0]; var setError = _err[1];
+  var _busy = useState(false); var busy = _busy[0]; var setBusy = _busy[1];
+  var _sent = useState(false); var sent = _sent[0]; var setSent = _sent[1];
+
+  function switchMode(m) { setMode(m); setError(null); setPassword(""); setPassword2(""); setSent(false); }
+
+  function sbErr(e) {
+    var map = {
+      "Invalid login credentials": "E-mail ou senha incorretos.",
+      "Email not confirmed": "Confirme seu e-mail antes de entrar.",
+      "User already registered": "Este e-mail já está cadastrado.",
+      "Password should be at least 6 characters": "A senha deve ter no mínimo 6 caracteres.",
+      "Unable to validate email address: invalid format": "E-mail inválido.",
+      "Email rate limit exceeded": "Muitas tentativas. Aguarde alguns minutos.",
+    };
+    var msg = e && e.message ? e.message : String(e);
+    return map[msg] || msg || "Ocorreu um erro. Tente novamente.";
+  }
+
+  function doLogin(e) {
+    e.preventDefault(); setBusy(true); setError(null);
+    window.sb.auth.signInWithPassword({ email: email, password: password })
+      .then(function(res) {
+        if (res.error) throw res.error;
+        if (!remember) {
+          // Sessão expira ao fechar o browser: escuta beforeunload
+          window.addEventListener("beforeunload", function() { window.sb.auth.signOut(); }, { once: true });
+        }
+        onLogin(res.data.user);
+      })
+      .catch(function(err) { setError(sbErr(err)); setBusy(false); });
+  }
+
+  function doRegister(e) {
+    e.preventDefault(); setError(null);
+    if (password !== password2) { setError("As senhas não coincidem."); return; }
+    setBusy(true);
+    window.sb.auth.signUp({ email: email, password: password })
+      .then(function(res) {
+        if (res.error) throw res.error;
+        // Supabase pode exigir confirmação de e-mail dependendo das configurações
+        if (res.data.session) { onLogin(res.data.user); }
+        else { setSent(true); setBusy(false); } // e-mail de confirmação enviado
+      })
+      .catch(function(err) { setError(sbErr(err)); setBusy(false); });
+  }
+
+  function doForgot(e) {
+    e.preventDefault(); setBusy(true); setError(null);
+    window.sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href })
+      .then(function(res) {
+        if (res.error) throw res.error;
+        setSent(true); setBusy(false);
+      })
+      .catch(function(err) { setError(sbErr(err)); setBusy(false); });
+  }
+
+  var onSubmit = mode === "login" ? doLogin : mode === "register" ? doRegister : doForgot;
+  var submitLabel = busy ? "..." : mode === "login" ? "ENTRAR" : mode === "register" ? "CRIAR CONTA" : "ENVIAR LINK";
+
+  return (
+    <div style={{ height: "100%", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 36, userSelect: "none" }}>
+        <div style={{ width: 36, height: 36, border: "2px solid " + C.ac, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontWeight: 700, fontSize: 11, color: C.ac, letterSpacing: 1 }}>PW</span>
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: 4, color: C.tx, lineHeight: 1 }}>PIT WALL</div>
+          <div style={{ fontSize: 9, fontWeight: 600, color: C.ts, letterSpacing: 2, marginTop: 3 }}>SETUP ENGINEER</div>
+        </div>
+      </div>
+
+      <div style={{ width: 400, background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "32px 36px" }}>
+        {mode !== "forgot" && (
+          <div style={{ display: "flex", borderBottom: "1px solid " + C.bd, marginBottom: 28 }}>
+            {[["login", "ENTRAR"], ["register", "CRIAR CONTA"]].map(function(item) {
+              var m = item[0]; var label = item[1]; var act = mode === m;
+              return (
+                <button key={m} onClick={function() { switchMode(m); }} style={{ flex: 1, padding: "9px 0", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontSize: 10, fontWeight: 600, letterSpacing: 1.5, cursor: "pointer", marginBottom: -1 }}>{label}</button>
+              );
+            })}
+          </div>
+        )}
+
+        {mode === "forgot" && (
+          <div style={{ marginBottom: 22 }}>
+            <button onClick={function() { switchMode("login"); }} style={{ background: "none", border: "none", color: C.ts, fontSize: 11, cursor: "pointer", marginBottom: 18, display: "flex", alignItems: "center", gap: 6 }}>← Voltar para entrar</button>
+            <div style={{ fontWeight: 700, fontSize: 14, color: C.tx, marginBottom: 6 }}>RECUPERAR SENHA</div>
+            <p style={{ color: C.ts, fontSize: 13, lineHeight: 1.6 }}>Informe seu e-mail. Você receberá um link para redefinir a senha.</p>
+          </div>
+        )}
+
+        {sent ? (
+          <div style={{ textAlign: "center", padding: "16px 0" }}>
+            <div style={{ fontSize: 26, color: C.ok, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 11, letterSpacing: 1, color: C.ok, marginBottom: 10 }}>{mode === "forgot" ? "E-MAIL ENVIADO" : "VERIFIQUE SEU E-MAIL"}</div>
+            <p style={{ color: C.ts, fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
+              {mode === "forgot"
+                ? "Verifique sua caixa de entrada e clique no link para redefinir a senha."
+                : "Confirme seu endereço de e-mail para ativar a conta, depois faça login."}
+            </p>
+            <button onClick={function() { switchMode("login"); }} style={{ color: C.ac, background: "none", border: "none", fontSize: 12, cursor: "pointer" }}>Voltar para entrar</button>
+          </div>
+        ) : (
+          <form onSubmit={onSubmit}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>E-MAIL</label>
+              <input type="email" required value={email} onChange={function(e) { setEmail(e.target.value); }} placeholder="seu@email.com"
+                style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            {mode !== "forgot" && (
+              <div style={{ marginBottom: mode === "login" ? 6 : 14 }}>
+                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>SENHA</label>
+                <input type="password" required minLength={6} value={password} onChange={function(e) { setPassword(e.target.value); }} placeholder="••••••••"
+                  style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
+              </div>
+            )}
+            {mode === "register" && (
+              <div style={{ marginBottom: 22 }}>
+                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>CONFIRMAR SENHA</label>
+                <input type="password" required minLength={6} value={password2} onChange={function(e) { setPassword2(e.target.value); }} placeholder="••••••••"
+                  style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
+              </div>
+            )}
+            {mode === "login" && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: C.ts }}>
+                  <input type="checkbox" checked={remember} onChange={function(e) { setRemember(e.target.checked); }} style={{ accentColor: C.ac }} />
+                  Lembrar-me
+                </label>
+                <button type="button" onClick={function() { switchMode("forgot"); }} style={{ background: "none", border: "none", color: C.ac, fontSize: 11, cursor: "pointer" }}>Esqueci minha senha</button>
+              </div>
+            )}
+            {mode === "register" && (
+              <p style={{ fontSize: 11, color: C.td, marginBottom: 18, lineHeight: 1.5 }}>Você também precisará configurar sua API key da Anthropic no app após o login.</p>
+            )}
+            {error && (
+              <div style={{ marginBottom: 14, padding: "9px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 4, color: "#f87171", fontSize: 12 }}>{error}</div>
+            )}
+            <button type="submit" disabled={busy} style={{ width: "100%", padding: "12px", background: busy ? C.bd : C.ac, border: "none", borderRadius: 4, color: busy ? C.td : "#000", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: busy ? "not-allowed" : "pointer" }}>
+              {submitLabel}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  // Auth state — undefined = checking, null = not logged in, object = logged in
+  var _user = useState(undefined); var user = _user[0]; var setUser = _user[1];
+  useEffect(function() {
+    if (!window.sb) { setUser(null); return; }
+    // Restore session from Supabase (handles "remember-me" automatically)
+    window.sb.auth.getSession().then(function(res) {
+      setUser((res.data && res.data.session) ? res.data.session.user : null);
+    });
+    var sub = window.sb.auth.onAuthStateChange(function(_event, session) {
+      setUser(session ? session.user : null);
+    });
+    return function() { sub.data && sub.data.subscription && sub.data.subscription.unsubscribe(); };
+  }, []);
+
+  var _step = useState("config"); var step = _step[0]; var setStep = _step[1];
+  // Session config
+  var _game = useState(""); var game = _game[0]; var setGame = _game[1];
+  var _cat = useState(""); var category = _cat[0]; var setCategory = _cat[1];
+  var _cars = useState([]); var selectedCars = _cars[0]; var setSelectedCars = _cars[1];
+  var _track = useState(""); var track = _track[0]; var setTrack = _track[1];
+  var _cond = useState("Dry"); var condition = _cond[0]; var setCondition = _cond[1];
+  var _stype = useState("race"); var sessionType = _stype[0]; var setSessionType = _stype[1];
+  var _laps = useState(""); var raceLaps = _laps[0]; var setRaceLaps = _laps[1];
+  // Chat state (persists across tab navigation)
+  var _msgs = useState([]); var messages = _msgs[0]; var setMessages = _msgs[1];
+  var _loading = useState(false); var loading = _loading[0]; var setLoading = _loading[1];
+  var _input = useState(""); var input = _input[0]; var setInput = _input[1];
+  // UI state
+  var _sidebar = useState(true); var sidebarOpen = _sidebar[0]; var setSidebarOpen = _sidebar[1];
+  var _tf = useState(""); var trackFilter = _tf[0]; var setTrackFilter = _tf[1];
+  var _cf = useState(""); var carFilter = _cf[0]; var setCarFilter = _cf[1];
+  var _toast = useState(null); var toast = _toast[0]; var setToast = _toast[1];
+  var _confirmDiscard = useState(false); var confirmDiscard = _confirmDiscard[0]; var setConfirmDiscard = _confirmDiscard[1];
+  // Saved setups
+  var _setups = useState([]); var savedSetups = _setups[0]; var setSavedSetups = _setups[1];
+  var _selSetup = useState(null); var selectedSetup = _selSetup[0]; var setSelectedSetup = _selSetup[1];
+  var _historyGame = useState(null); var historyGame = _historyGame[0]; var setHistoryGame = _historyGame[1];
+  // API Key
+  var _apiKey = useState(localStorage.getItem("pitwall_api_key") || ""); var apiKey = _apiKey[0]; var setApiKey = _apiKey[1];
+  var _showKey = useState(!localStorage.getItem("pitwall_api_key")); var showKeyInput = _showKey[0]; var setShowKeyInput = _showKey[1];
+  // Track maps cache (in-memory + localStorage)
+  var _tmaps = useState(function() {
+    try {
+      var v = localStorage.getItem("pitwall_trackmaps");
+      if (!v) return {};
+      var parsed = JSON.parse(v);
+      // Purge old AI-generated SVG blobs ("<svg") and stale NOT_FOUND — keep only valid URLs
+      var cleaned = {};
+      Object.keys(parsed).forEach(function(k) {
+        var val = parsed[k];
+        if (typeof val === "string" && !val.startsWith("<") && val !== "NOT_FOUND") cleaned[k] = val;
+      });
+      return cleaned;
+    } catch(e) { return {}; }
+  });
+  var trackMaps = _tmaps[0]; var setTrackMaps = _tmaps[1];
+  var _tmapLoading = useState(null); var trackMapLoading = _tmapLoading[0]; var setTrackMapLoading = _tmapLoading[1];
+  var chatEndRef = useRef(null);
+
+  var hasSession = messages.length > 0;
+
+  useEffect(function() { loadSetups(); }, []);
+  useEffect(function() { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
+  useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
+  useEffect(function() {
+    if (toast) { var t = setTimeout(function() { setToast(null); }, 2800); return function() { clearTimeout(t); }; }
+  }, [toast]);
+  // Auto-fetch track map when engineer session starts
+  useEffect(function() {
+    if (game && track) fetchTrackMap(game, track);
+  }, [game, track]);
+
+  function loadSetups() {
+    window.storage.get("pit_wall_setups").then(function(r) { if (r && r.value) { try { setSavedSetups(JSON.parse(r.value)); } catch(e) {} } });
+  }
+  function persistSetups(s) { window.storage.set("pit_wall_setups", JSON.stringify(s)); }
+
+  // Curated Wikimedia Commons filenames for known circuits (exact match = instant, reliable)
+  var TRACK_FILES = {
+    "Interlagos": "Circuit_Interlagos.svg",
+    "Spa-Francorchamps": "Spa-Francorchamps_circuit.svg",
+    "Nürburgring GP": "Nurburgring_track.svg",
+    "Nürburgring Nordschleife": "Nurburgring_Nordschleife_track.svg",
+    "Nürburgring Combined (24H)": "Nurburgring_combined_circuit.svg",
+    "Nürburgring 24H": "Nurburgring_combined_circuit.svg",
+    "Monza": "Monza_track_map.svg",
+    "Monza 1971 (with banking)": "Monza_track_1955-1971.svg",
+    "Silverstone GP": "Silverstone_circuit_2011.svg",
+    "Silverstone International": "Silverstone_circuit_2011.svg",
+    "Silverstone National": "Silverstone_circuit_2011.svg",
+    "Silverstone": "Silverstone_circuit_2011.svg",
+    "Brands Hatch GP": "Brands_Hatch_circuit.svg",
+    "Brands Hatch Indy": "Brands_Hatch_circuit.svg",
+    "Bathurst (Mount Panorama)": "Mount_Panorama_circuit.svg",
+    "Mount Panorama (Bathurst)": "Mount_Panorama_circuit.svg",
+    "Imola": "Imola_circuit.svg",
+    "Suzuka": "Suzuka_circuit.svg",
+    "Kyalami": "Kyalami_Grand_Prix_Circuit.svg",
+    "Donington Park GP": "Donington_Park_circuit.svg",
+    "Donington Park National": "Donington_Park_circuit.svg",
+    "Donington Park": "Donington_Park_circuit.svg",
+    "Snetterton 300": "Snetterton_circuit.svg",
+    "Snetterton 200": "Snetterton_circuit.svg",
+    "Oulton Park International": "Oulton_Park_circuit.svg",
+    "Oulton Park Fosters": "Oulton_Park_circuit.svg",
+    "Oulton Park": "Oulton_Park_circuit.svg",
+    "Cadwell Park": "Cadwell_Park_circuit.svg",
+    "Spielberg (Red Bull Ring)": "Red_Bull_Ring.svg",
+    "Red Bull Ring": "Red_Bull_Ring.svg",
+    "Hungaroring": "Hungaroring_track.svg",
+    "Jerez": "Jerez_track.svg",
+    "Barcelona-Catalunya": "Circuit_de_Barcelona-Catalunya_track_map.svg",
+    "Barcelona-Catalunya 1991 (Chicane)": "Circuit_de_Barcelona-Catalunya_track_map.svg",
+    "Hockenheimring GP": "Hockenheim_track.svg",
+    "Hockenheimring National": "Hockenheim_track.svg",
+    "Hockenheimring Short": "Hockenheim_track.svg",
+    "Zolder": "Zolder_circuit.svg",
+    "Zandvoort": "Circuit_Zandvoort.svg",
+    "Buenos Aires No.6": "Autodromo_Buenos_Aires_Num6.svg",
+    "Watkins Glen": "Watkins_Glen.svg",
+    "Long Beach": "Long_Beach_circuit.svg",
+    "Azure Circuit (Monaco)": "Monte_Carlo_Formula_1_track_map.svg",
+    "Le Mans (Circuit de la Sarthe)": "Le_Mans_circuit_2010.svg",
+    "Circuit de la Sarthe": "Le_Mans_circuit_2010.svg",
+    "Laguna Seca": "Laguna_Seca_track_map.svg",
+    "WeatherTech Raceway Laguna Seca": "Laguna_Seca_track_map.svg",
+    "Daytona Road Course": "Daytona_road_course.svg",
+    "Daytona Tri-Oval": "Daytona_International_Speedway_track_map.svg",
+    "Daytona International Speedway (Road)": "Daytona_road_course.svg",
+    "Daytona International Speedway (Oval)": "Daytona_International_Speedway_track_map.svg",
+    "Sebring": "Sebring_International_Raceway_track_map.svg",
+    "Sebring International Raceway": "Sebring_International_Raceway_track_map.svg",
+    "Road America": "Road_America_track_map.svg",
+    "Mid-Ohio": "Mid-Ohio_Sports_Car_Course_track_map.svg",
+    "Mid-Ohio Sports Car Course": "Mid-Ohio_Sports_Car_Course_track_map.svg",
+    "Indianapolis Road Course": "Indianapolis_Motor_Speedway_road_course.svg",
+    "Indianapolis Motor Speedway (Road)": "Indianapolis_Motor_Speedway_road_course.svg",
+    "Indianapolis Oval": "Indianapolis_Motor_Speedway_track_map.svg",
+    "Indianapolis Motor Speedway (Oval)": "Indianapolis_Motor_Speedway_track_map.svg",
+    "Pocono Raceway": "Pocono_Raceway_track_map.svg",
+    "Circuit of the Americas (COTA)": "Circuit_of_the_Americas_track_map.svg",
+    "COTA (Circuit of the Americas)": "Circuit_of_the_Americas_track_map.svg",
+    "Portimão (Algarve International Circuit)": "Autodromo_Internacional_do_Algarve_track_map.svg",
+    "Portimão": "Autodromo_Internacional_do_Algarve_track_map.svg",
+    "Paul Ricard": "Circuit_Paul_Ricard_track_map.svg",
+    "Misano": "Misano_World_Circuit_track_map.svg",
+    "Mugello": "Mugello_circuit.svg",
+    "Fuji Speedway": "Fuji_Speedway_F1.svg",
+    "Phillip Island": "Phillip_Island_Circuit_track_map.svg",
+    "Bahrain International Circuit": "Bahrain_International_Circuit--Grand_Prix_layout.svg",
+    "Jeddah Corniche Circuit": "Jeddah_Corniche_Circuit_track_map.svg",
+    "Talladega Superspeedway": "Talladega_Superspeedway_track_map.svg",
+    "Charlotte Motor Speedway (Oval)": "Charlotte_Motor_Speedway_track_map.svg",
+    "Charlotte Motor Speedway (Roval)": "Charlotte_Motor_Speedway_ROVAL_track_map.svg",
+    "Martinsville Speedway": "Martinsville_Speedway_track_map.svg",
+    "Bristol Motor Speedway": "Bristol_Motor_Speedway_track_map.svg",
+    "Estoril": "Estoril_Circuit_track_map.svg",
+    "Norisring": "Norisring_track_map.svg",
+    "Sachsenring": "Sachsenring_track_map.svg",
+    "Goiânia": "Autodromo_Internacional_Ayrton_Senna_track_map.svg",
+    "Cascavel": "Autodromo_Internacional_de_Cascavel_track_map.svg",
+    "Curitiba": "Autodromo_Internacional_de_Curitiba_track_map.svg",
+    "Jacarepaguá": "Autodromo_de_Jacarepagua_track_map.svg",
+    "Sepang": "Sepang_International_Circuit_track_map.svg",
+    "Lusail International Circuit": "Lusail_International_Circuit_track_map.svg",
+  };
+
+  function fetchTrackMap(gameKey, trackName) {
+    if (!trackName || !gameKey) return;
+    var key = gameKey + "||" + trackName;
+    if (trackMaps[key] || trackMapLoading === key) return;
+    setTrackMapLoading(key);
+
+    var BAD = /logo|flag|emblem|badge|coat|shield|seal|icon|button|symbol|ribbon|portrait|photo|aerial/i;
+    var GOOD = /circuit|track|layout|raceway|speedway|autodrome|racetrack|grand_prix/i;
+
+    function saveMap(val) {
+      setTrackMaps(function(prev) {
+        var n = Object.assign({}, prev); n[key] = val;
+        try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {}
+        return n;
+      });
+      setTrackMapLoading(null);
+    }
+
+    function fetchByFilename(filename) {
+      return fetch("https://commons.wikimedia.org/w/api.php?action=query&titles=File:" + encodeURIComponent(filename) + "&prop=imageinfo&iiprop=url&iiurlwidth=1200&format=json&origin=*")
+        .then(function(r) { return r.json(); })
+        .then(function(info) {
+          var pages = (info.query || {}).pages || {};
+          var page = Object.values(pages)[0];
+          if (!page || page.missing !== undefined) return null;
+          var iinfo = page.imageinfo && page.imageinfo[0];
+          return (iinfo && (iinfo.thumburl || iinfo.url)) || null;
+        });
+    }
+
+    // 1. Try curated filename first
+    var curated = TRACK_FILES[trackName];
+    var p = curated
+      ? fetchByFilename(curated).then(function(url) { return url || searchWikimedia(trackName); })
+      : searchWikimedia(trackName);
+
+    p.then(function(url) { saveMap(url || "NOT_FOUND"); })
+     .catch(function() { saveMap("NOT_FOUND"); });
+
+    function searchWikimedia(name) {
+      // Strip parenthetical suffixes like "(NEW v1.6)" or "(Road)" for cleaner search
+      var clean = name.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+      var q = encodeURIComponent(clean + " circuit layout");
+      return fetch("https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=" + q + "+filetype:svg&srnamespace=6&srlimit=15&format=json&origin=*")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var hits = ((data.query || {}).search || []);
+          var svgs = hits.filter(function(h) { return h.title.toLowerCase().endsWith('.svg') && !BAD.test(h.title); });
+          var best = svgs.find(function(h) { return GOOD.test(h.title); }) || svgs[0];
+          if (!best) return null;
+          var filename = best.title.replace(/^File:/i, '');
+          return fetchByFilename(filename);
+        });
+    }
+  }
+
+  function saveSetup() {
+    if (messages.length < 2) return;
+    var g = GAMES[game];
+    var s = {
+      id: Date.now().toString(),
+      game: g ? g.name : game, gameKey: game,
+      category: (g && g.categories[category]) ? g.categories[category].name : category,
+      categoryKey: category,
+      cars: selectedCars.slice(), track, condition,
+      sessionType, raceLaps,
+      messages: messages.slice(),
+      ts: new Date().toISOString(),
+    };
+    var n = [s].concat(savedSetups);
+    setSavedSetups(n); persistSetups(n);
+    setToast("Setup saved!");
+    // Session remains active — user can keep chatting
+  }
+
+  function deleteSetup(id) {
+    var n = savedSetups.filter(function(s) { return s.id !== id; });
+    setSavedSetups(n); persistSetups(n);
+    if (selectedSetup && selectedSetup.id === id) setSelectedSetup(null);
+  }
+
+  function discardSession() {
+    setMessages([]); setGame(""); setCategory(""); setSelectedCars([]); setTrack(""); setCondition("Dry");
+    setSessionType("race"); setRaceLaps(""); setStep("config"); setConfirmDiscard(false);
+  }
+
+  // Restore a saved setup as active session so user can continue chatting
+  function continueFromSetup(s) {
+    setGame(s.gameKey || ""); setCategory(s.categoryKey || "");
+    setSelectedCars(s.cars || []); setTrack(s.track || ""); setCondition(s.condition || "Dry");
+    setSessionType(s.sessionType || "race"); setRaceLaps(s.raceLaps || "");
+    setMessages(s.messages || []); setStep("chat"); setSelectedSetup(null);
+  }
+
+  var cg = GAMES[game] || null;
+  var cc = (cg && cg.categories) ? cg.categories[category] || null : null;
+  var allCars = cc ? cc.cars : [];
+  var trks = cg ? cg.tracks : [];
+  var fTrks = trks.filter(function(t) { return t.toLowerCase().includes(trackFilter.toLowerCase()); });
+  var fCars = allCars.filter(function(c) { return c.toLowerCase().includes(carFilter.toLowerCase()); });
+
+  function toggleCar(car) { setSelectedCars(function(p) { return p.includes(car) ? p.filter(function(c) { return c !== car; }) : p.concat([car]); }); }
+  function selAll() { setSelectedCars(selectedCars.length === allCars.length ? [] : allCars.slice()); }
+  var canGo = game && category && selectedCars.length > 0 && track && condition;
+
+  function buildSystemPrompt() {
+    var g = GAMES[game]; var cat = g.categories[category];
+    var sessionPart = sessionType === "qualifying"
+      ? " This is a QUALIFYING setup — maximize single-lap peak performance. Prioritize grip, minimal drag for this circuit layout."
+      : " This is a RACE setup — balance performance with tyre life and fuel consumption across " + (raceLaps > 0 ? raceLaps + " laps" : "the full race distance") + ".";
+    var stratPart = (sessionType === "race" && Number(raceLaps) > 0)
+      ? " Additionally, provide a recommended pit stop strategy for " + raceLaps + " laps: number of stops, ideal stop windows (lap numbers), tyre compound choices per stint, and any fuel-saving considerations."
+      : "";
+    return 'You are an elite sim racing engineer for "' + g.name + '". RULES: 1) Match EXACTLY the adjustable parameters in "' + g.name + '". 2) Use exact naming, units, value ranges. 3) Same grouping order as the game UI. 4) Separate setup per car. 5) Be precise and technical.' + sessionPart + stratPart + ' SESSION: ' + g.name + ' | ' + cat.name + ' | Cars: ' + selectedCars.join(", ") + ' | Track: ' + track + ' | ' + condition + '. FOR INITIAL REQUEST: provide a complete baseline with ALL parameters. FOR FOLLOW-UP FEEDBACK: 1) Acknowledge the issue 2) Explain root cause 3) State precise parameter changes with exact values 4) Explain trade-offs 5) List priority order 6) Note interactions with other parameters. FORMAT: per-car headers, group by Tyres/Alignment/Suspension/Aero/Gearing/Brakes/Electronics. Use markdown tables for parameter values.';
+  }
+
+  function sendMsg(msg) {
+    if (!msg.trim()) return;
+    if (!apiKey) { setShowKeyInput(true); return; }
+    var nm = messages.concat([{ role: "user", content: msg }]);
+    setMessages(nm); setInput(""); setLoading(true);
+    var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
+    if (nm.length === 1) am[0].content = "[Driver]: " + msg;
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "API Error: " + (d.error.message || JSON.stringify(d.error)) }]); }); return; }
+      var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n") || "No response.";
+      setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
+    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Error: " + e.message }]); }); })
+    .finally(function() { setLoading(false); });
+  }
+
+  function startSession() {
+    var g = GAMES[game];
+    setStep("chat"); setMessages([]);
+    setTimeout(function() {
+      var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
+      sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + g.name + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : ""));
+    }, 80);
+  }
+
+  function saveApiKey() { localStorage.setItem("pitwall_api_key", apiKey); setShowKeyInput(false); }
+
+  function getSetupTxt(msgs) { return msgs.filter(function(m) { return m.role === "assistant"; }).map(function(m) { return m.content; }).join("\n\n---\n\n"); }
+  function exportTxt(s) {
+    var blob = new Blob(["SETUP: " + s.game + " | " + s.track + " | " + s.condition + " | " + (s.sessionType === "qualifying" ? "QUALIFYING" : "RACE" + (s.raceLaps ? " (" + s.raceLaps + " laps)" : "")) + "\nCategory: " + s.category + "\nCars: " + s.cars.join(", ") + "\n" + "=".repeat(60) + "\n\n" + getSetupTxt(s.messages)], { type: "text/plain" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Setup_" + s.track.replace(/\W/g, "_") + ".txt"; a.click();
+  }
+  function exportCsv(s) {
+    var csv = "Section,Parameter,Value\n"; var sec = "General";
+    getSetupTxt(s.messages).split("\n").forEach(function(line) {
+      var t = line.trim();
+      if (t.startsWith("## ") || t.startsWith("# ")) sec = t.replace(/^#+\s*/, "");
+      else if (t.startsWith("|") && !t.includes("---")) { var cols = t.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, ""); }); if (cols.length >= 2) csv += '"' + sec + '","' + cols[0] + '","' + cols.slice(1).join(" | ") + '"\n'; }
+      else if (t.startsWith("- ") || t.startsWith("* ")) { var parts = t.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(":"); if (parts.length >= 2) csv += '"' + sec + '","' + parts[0].trim() + '","' + parts.slice(1).join(":").trim() + '"\n'; }
+    });
+    var blob = new Blob([csv], { type: "text/csv" }); var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Setup_" + s.track.replace(/\W/g, "_") + ".csv"; a.click();
+  }
+
+  var qf = ["Understeer at corner entry","Oversteer on corner exit","Unstable under braking","No rear traction on throttle","Bottoming out on straights","Too stiff over kerbs","Excessive tyre degradation","Loose at high speed","Need more front grip in slow corners","Poor braking performance"];
+
+  // ── SHARED HEADER ───────────────────────────────────────────────────────────
+  function Header() {
+    return (
+      <div style={{ height: 52, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 20px", gap: 0, position: "relative", zIndex: 20 }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 28, userSelect: "none", flexShrink: 0 }}>
+          <div style={{ width: 30, height: 30, border: "2px solid " + C.ac, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1 }}>PW</span>
+          </div>
+          <div>
+            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.tx, lineHeight: 1 }}>PIT WALL</div>
+            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 600, color: C.ts, letterSpacing: 2, marginTop: 3 }}>SETUP ENGINEER</div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        {[
+          { key: "config", label: "CONFIGURE" },
+          { key: "chat", label: "ENGINEER" },
+          { key: "history", label: "SAVED SETUPS" },
+        ].map(function(tab) {
+          var act = step === tab.key;
+          return (
+            <button key={tab.key} onClick={function() {
+              if (tab.key === "config") { setStep("config"); }
+              else if (tab.key === "chat") { setStep("chat"); }
+              else { setStep("history"); setSelectedSetup(null); if (savedSetups.length > 0) setHistoryGame(savedSetups[0].game); }
+            }} style={{
+              height: 52, padding: "0 18px", background: "transparent", border: "none",
+              borderBottom: "2px solid " + (act ? C.ac : "transparent"),
+              color: act ? C.ac : C.tm,
+              fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: 1.5,
+              display: "flex", alignItems: "center", gap: 7,
+            }}>
+              {tab.label}
+              {tab.key === "history" && savedSetups.length > 0 &&
+                <span style={{ background: C.ac, color: "#000", borderRadius: 2, padding: "1px 5px", fontSize: 9, fontWeight: 700, lineHeight: 1.6 }}>{savedSetups.length}</span>}
+              {tab.key === "chat" && hasSession &&
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.ok, flexShrink: 0 }} />}
+            </button>
+          );
+        })}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Session active badge + discard */}
+        {hasSession && (
+          <button onClick={function() { setConfirmDiscard(true); }} style={{
+            marginRight: 10, padding: "4px 10px", background: "transparent",
+            border: "1px solid " + C.bd, borderRadius: 3,
+            color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1,
+          }}>DISCARD SESSION</button>
+        )}
+
+        {/* API status */}
+        <button onClick={function() { setShowKeyInput(!showKeyInput); }} style={{
+          padding: "5px 12px", background: "transparent", marginRight: 6,
+          border: "1px solid " + (apiKey ? C.bd : C.danger), borderRadius: 3,
+          color: apiKey ? C.ok : C.danger, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1,
+        }}>{apiKey ? "● API ACTIVE" : "○ SET API KEY"}</button>
+
+        {/* Logout */}
+        <button onClick={function() { window.sb.auth.signOut(); }} style={{
+          padding: "5px 10px", background: "transparent",
+          border: "1px solid " + C.bd, borderRadius: 3,
+          color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1,
+        }}>SAIR</button>
+      </div>
+    );
+  }
+
+  // Discard confirm modal
+  function DiscardModal() {
+    if (!confirmDiscard) return null;
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+        <div style={{ background: C.sf, border: "1px solid " + C.bdh, borderRadius: 6, padding: "28px 32px", width: 380, textAlign: "center" }}>
+          <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 10 }}>DISCARD SESSION?</div>
+          <p style={{ color: C.ts, fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>This will clear the current Engineer session. Save the setup first if you want to keep it.</p>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={function() { setConfirmDiscard(false); }} style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1 }}>CANCEL</button>
+            <button onClick={discardSession} style={{ flex: 1, padding: "10px", background: C.danger, border: "none", borderRadius: 3, color: "#fff", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>DISCARD</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Toast
+  function Toast() {
+    if (!toast) return null;
+    return (
+      <div className="toast-enter" style={{ position: "fixed", bottom: 24, right: 24, background: C.sfh, border: "1px solid " + C.ok, borderRadius: 5, padding: "10px 18px", color: C.ok, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
+        {toast}
+      </div>
+    );
+  }
+
+  // ── AUTH GUARDS ─────────────────────────────────────────────────────────────
+  if (!window.sb) return <SupabaseSetupScreen />;
+  if (user === undefined) return (
+    <div style={{ height: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontSize: 9, letterSpacing: 3, color: C.td }}>CARREGANDO...</div>
+    </div>
+  );
+  if (!user) return <AuthScreen onLogin={function(u) { setUser(u); }} />;
+
+  // ── API KEY ─────────────────────────────────────────────────────────────────
+  if (showKeyInput) {
+    return (
+      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <Header />
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: C.bg }}>
+          <div style={{ width: 440, background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "36px 40px" }}>
+            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.ac, marginBottom: 8 }}>CONFIGURAÇÃO</div>
+            <h2 style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 20, color: C.tx, marginBottom: 14 }}>Anthropic API Key</h2>
+            <p style={{ color: C.ts, fontSize: 13, marginBottom: 24, lineHeight: 1.65 }}>
+              Para usar o PIT WALL localmente, você precisa de uma API key da Anthropic.{" "}
+              <a href="https://console.anthropic.com/" target="_blank" style={{ color: C.ac, textDecoration: "none" }}>console.anthropic.com</a>
+            </p>
+            <input type="password" value={apiKey} onChange={function(e) { setApiKey(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && apiKey.trim()) saveApiKey(); }} placeholder="sk-ant-..."
+              style={{ width: "100%", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 14, marginBottom: 16, boxSizing: "border-box" }} />
+            <button onClick={saveApiKey} disabled={!apiKey.trim()} style={{ width: "100%", padding: "12px", background: apiKey.trim() ? C.ac : C.bd, border: "none", borderRadius: 4, color: apiKey.trim() ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: apiKey.trim() ? "pointer" : "not-allowed", textTransform: "uppercase" }}>SALVAR E CONTINUAR</button>
+            <p style={{ color: C.td, fontSize: 11, marginTop: 12, textAlign: "center" }}>Salvo apenas localmente no seu navegador.</p>
+          </div>
+        </div>
+        <Toast /><DiscardModal />
+      </div>
+    );
+  }
+
+  // ── CONFIG ──────────────────────────────────────────────────────────────────
+  if (step === "config") {
+    return (
+      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <Header />
+
+        {/* Simulator bar */}
+        <div style={{ height: 48, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 20px", gap: 6 }}>
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, marginRight: 12, flexShrink: 0 }}>SIMULATOR</span>
+          {Object.entries(GAMES).map(function(e2) {
+            var k = e2[0]; var g = e2[1]; var sel = game === k;
+            return (
+              <button key={k} onClick={function() { setGame(k); }} style={{ padding: "5px 16px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: sel ? 700 : 400, letterSpacing: 1 }}>
+                {g.name}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 3-panel area — fills remaining height */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+
+          {/* Panel 1: Category */}
+          <div style={{ width: 244, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column" }}>
+            <div style={{ height: 38, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>CATEGORY</span>
+              {game && <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, color: C.td }}>{Object.keys(cg.categories).length}</span>}
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+              {!game
+                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center", lineHeight: 1.6 }}>Select a simulator<br/>above</div>
+                : Object.entries(cg.categories).map(function(e2) {
+                    var k = e2[0]; var cat = e2[1]; var sel = category === k;
+                    return (
+                      <button key={k} onClick={function() { setCategory(k); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "9px 12px 9px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
+                        <span>{cat.name}</span>
+                        <span style={{ fontSize: 11, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length}</span>
+                      </button>
+                    );
+                  })
+              }
+            </div>
+          </div>
+
+          {/* Panel 2: Cars */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid " + C.bd, minWidth: 0, background: C.bg }}>
+            <div style={{ height: 38, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CARS</span>
+              {category && <>
+                <input placeholder="Search..." value={carFilter} onChange={function(e) { setCarFilter(e.target.value); }} style={{ flex: 1, maxWidth: 200, padding: "4px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 12 }} />
+                <span style={{ fontSize: 9, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{selectedCars.length}/{allCars.length}</span>
+                <button onClick={selAll} style={{ padding: "3px 9px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.tm, fontSize: 8, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, flexShrink: 0 }}>{selectedCars.length === allCars.length ? "CLEAR" : "ALL"}</button>
+              </>}
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+              {!category
+                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center" }}>Select a category</div>
+                : fCars.map(function(car) {
+                    var sel = selectedCars.includes(car);
+                    return (
+                      <button key={car} onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "8px 10px 8px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 13, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                        <span style={{ width: 14, height: 14, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
+                        {car}
+                      </button>
+                    );
+                  })
+              }
+            </div>
+          </div>
+
+          {/* Panel 3: Tracks */}
+          <div style={{ width: 296, flexShrink: 0, display: "flex", flexDirection: "column", background: C.bg }}>
+            <div style={{ height: 38, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>TRACK</span>
+              {game && <input placeholder="Search..." value={trackFilter} onChange={function(e) { setTrackFilter(e.target.value); }} style={{ flex: 1, padding: "4px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 12 }} />}
+              {game && <span style={{ fontSize: 9, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{fTrks.length}</span>}
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+              {!game
+                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center" }}>Select a simulator above</div>
+                : fTrks.map(function(t) {
+                    var sel = track === t;
+                    return (
+                      <button key={t} onClick={function() { setTrack(t); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px 8px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                        {t}
+                      </button>
+                    );
+                  })
+              }
+            </div>
+          </div>
+        </div>
+
+        {/* Footer: Session type + Laps + Conditions + Generate */}
+        <div style={{ height: 58, flexShrink: 0, borderTop: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", padding: "0 20px", gap: 10 }}>
+
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>SESSION</span>
+          {["qualifying", "race"].map(function(st) {
+            var sel = sessionType === st;
+            return (
+              <button key={st} onClick={function() { setSessionType(st); }} style={{ padding: "5px 12px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
+                {st === "qualifying" ? "QUALIFYING" : "RACE"}
+              </button>
+            );
+          })}
+
+          {sessionType === "race" && (
+            <>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0, marginLeft: 4 }}>LAPS</span>
+              <input type="number" min="1" max="9999" value={raceLaps} onChange={function(e) { setRaceLaps(e.target.value); }} placeholder="0"
+                style={{ width: 62, padding: "5px 8px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13, textAlign: "center" }} />
+            </>
+          )}
+
+          <div style={{ width: 1, height: 22, background: C.bd, flexShrink: 0, margin: "0 6px" }} />
+
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CONDITIONS</span>
+          {CONDITIONS.map(function(c) {
+            var sel = condition === c;
+            return (
+              <button key={c} onClick={function() { setCondition(c); }} style={{ padding: "5px 12px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
+                {c}
+              </button>
+            );
+          })}
+
+          <div style={{ flex: 1 }} />
+
+          {canGo && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 14, fontSize: 12, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>
+              <span style={{ color: C.td }}>{selectedCars.length} car{selectedCars.length !== 1 ? "s" : ""}</span>
+              <span style={{ color: C.td }}>·</span>
+              <span style={{ color: C.ts }}>{track.length > 30 ? track.slice(0, 28) + "…" : track}</span>
+              <span style={{ color: C.td }}>·</span>
+              <span style={{ color: C.ac }}>{sessionType === "qualifying" ? "QUALI" : "RACE" + (raceLaps ? " " + raceLaps + "L" : "")}</span>
+            </div>
+          )}
+
+          <button onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ padding: "11px 30px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 3, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0 }}>
+            GENERATE SETUP
+          </button>
+        </div>
+
+        <Toast /><DiscardModal />
+      </div>
+    );
+  }
+
+  // ── SAVED SETUPS — grouped by game ─────────────────────────────────────────
+  if (step === "history") {
+    // Group by game name
+    var gameGroups = {};
+    savedSetups.forEach(function(s) { if (!gameGroups[s.game]) gameGroups[s.game] = []; gameGroups[s.game].push(s); });
+    var gameNames = Object.keys(gameGroups);
+    var activeGame = historyGame && gameGroups[historyGame] ? historyGame : (gameNames[0] || null);
+    var groupSetups = activeGame ? gameGroups[activeGame] : [];
+
+    if (selectedSetup) {
+      // Auto-fetch map when detail opens
+      var _mapKey = (selectedSetup.gameKey || "") + "||" + selectedSetup.track;
+      if (!trackMaps[_mapKey] && trackMapLoading !== _mapKey && apiKey) {
+        setTimeout(function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }, 0);
+      }
+      // Detail view
+      return (
+        <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+          <Header />
+          <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
+            <div>
+              <button onClick={function() { setSelectedSetup(null); }} style={{ background: "none", border: "none", color: C.ts, fontSize: 12, cursor: "pointer", marginBottom: 20, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>← BACK TO SAVED SETUPS</button>
+              <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "20px 24px", marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1.5, marginBottom: 7 }}>{selectedSetup.game}</div>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: C.tx, marginBottom: 3 }}>{selectedSetup.track}</div>
+                    <div style={{ fontSize: 13, color: C.ts }}>{selectedSetup.category}  ·  {selectedSetup.condition}  ·  <span style={{ color: C.ac }}>{selectedSetup.sessionType === "qualifying" ? "Qualifying" : "Race" + (selectedSetup.raceLaps ? " · " + selectedSetup.raceLaps + " laps" : "")}</span></div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={function() { exportTxt(selectedSetup); }} style={{ padding: "5px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT TXT</button>
+                      <button onClick={function() { exportCsv(selectedSetup); }} style={{ padding: "5px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT CSV</button>
+                    </div>
+                    <button onClick={function() { continueFromSetup(selectedSetup); }} style={{ padding: "7px 16px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>CONTINUE IN ENGINEER</button>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: C.tm }}>Cars: <span style={{ color: C.ts }}>{selectedSetup.cars.join(", ")}</span></div>
+              </div>
+              {(function() {
+                var key = (selectedSetup.gameKey || "") + "||" + selectedSetup.track;
+                var svg = trackMaps[key];
+                var loading2 = trackMapLoading === key;
+                return (
+                  <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "16px 20px", marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>TRACK MAP — {selectedSetup.track.toUpperCase()}</span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {svg && <button onClick={function() {
+                          setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[key]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
+                          fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track);
+                        }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 8, letterSpacing: 0.5 }}>↺ REGENERATE</button>}
+                        {!svg && !loading2 && <button onClick={function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>LOAD TRACK MAP</button>}
+                      </div>
+                    </div>
+                    {loading2 && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 0", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>SEARCHING CIRCUIT LAYOUT...</span></div>}
+                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#fff" }}><img src={svg} alt={selectedSetup.track} style={{ width: "100%", height: "auto", display: "block" }} /></div>}
+                    {svg === "NOT_FOUND" && <div style={{ color: C.td, fontSize: 12, textAlign: "center", padding: "14px 0" }}>Map not found — try regenerate or check the track name</div>}
+                    {!svg && !loading2 && <div style={{ color: C.td, fontSize: 12, textAlign: "center", padding: "14px 0" }}>Click "Load Track Map" to fetch the real circuit layout</div>}
+                  </div>
+                );
+              })()}
+
+              <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "22px 26px" }}>
+                {selectedSetup.messages.map(function(m, i) {
+                  var u = m.role === "user";
+                  return (
+                    <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
+                      {u
+                        ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
+                        : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content)}</div>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <Toast /><DiscardModal />
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <Header />
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+
+          {/* Game sidebar */}
+          <div style={{ width: 220, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column" }}>
+            <div style={{ height: 38, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>SIMULATORS</span>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+              {gameNames.length === 0
+                ? <div style={{ padding: "24px 14px", color: C.td, fontSize: 13, textAlign: "center" }}>No saved setups</div>
+                : gameNames.map(function(gName) {
+                    var sel = gName === activeGame;
+                    return (
+                      <button key={gName} onClick={function() { setHistoryGame(gName); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "10px 12px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0", textAlign: "left" }}>
+                        <span>{gName}</span>
+                        <span style={{ fontSize: 10, color: sel ? C.acb : C.td, flexShrink: 0, marginLeft: 6 }}>{gameGroups[gName].length}</span>
+                      </button>
+                    );
+                  })
+              }
+            </div>
+          </div>
+
+          {/* Setups grid */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 22px", background: C.bg }}>
+            {!activeGame ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 28, letterSpacing: 5, opacity: 0.06, color: C.tx, marginBottom: 14 }}>[ ]</div>
+                <div style={{ fontSize: 14, color: C.td }}>No saved setups yet</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: 2, color: C.tx }}>{activeGame}</span>
+                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, color: C.td, letterSpacing: 1 }}>{groupSetups.length} SETUP{groupSetups.length !== 1 ? "S" : ""}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 10 }}>
+                  {groupSetups.map(function(s) {
+                    return (
+                      <div key={s.id} onClick={function() { setSelectedSetup(s); }} style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 5, padding: "16px 18px", cursor: "pointer", position: "relative" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, letterSpacing: 1.5, color: s.sessionType === "qualifying" ? C.warn : C.ac }}>{s.sessionType === "qualifying" ? "QUALIFYING" : "RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : "")}</span>
+                          <div style={{ display: "flex", gap: 2 }}>
+                            <button onClick={function(e) { e.stopPropagation(); continueFromSetup(s); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 9, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5 }}>OPEN</button>
+                            <button onClick={function(e) { e.stopPropagation(); deleteSetup(s.id); }} style={{ padding: "2px 7px", background: "transparent", border: "none", color: C.td, fontSize: 12 }}>✕</button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{s.track}</div>
+                        <div style={{ fontSize: 13, color: C.ts, marginBottom: 8 }}>{s.category}</div>
+                        <div style={{ fontSize: 12, color: C.tm, marginBottom: 10 }}>{s.cars.slice(0, 2).join(", ")}{s.cars.length > 2 ? " +" + (s.cars.length - 2) + " more" : ""}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTop: "1px solid " + C.bd }}>
+                          <span style={{ fontSize: 11, color: C.td }}>{new Date(s.ts).toLocaleDateString("pt-BR")}</span>
+                          <span style={{ fontSize: 11, color: s.condition === "Wet" ? "#60a5fa" : C.tm }}>{s.condition}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <Toast /><DiscardModal />
+      </div>
+    );
+  }
+
+  // ── ENGINEER / CHAT ─────────────────────────────────────────────────────────
+  return (
+    <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+      <Header />
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+
+        {/* Sidebar */}
+        {sidebarOpen && (
+          <div style={{ width: 262, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Session info */}
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid " + C.bd }}>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td, marginBottom: 10 }}>SESSION</div>
+              {[["Simulator", cg ? cg.name : "—"], ["Category", cc ? cc.name : "—"], ["Track", track || "—"], ["Conditions", condition], ["Session Type", sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : "")]].map(function(r) {
+                return (
+                  <div key={r[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: 12, marginBottom: 6 }}>
+                    <span style={{ color: C.td, flexShrink: 0 }}>{r[0]}</span>
+                    <span style={{ color: C.ts, fontWeight: 500, maxWidth: 148, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r[1]}</span>
+                  </div>
+                );
+              })}
+              {selectedCars.length > 0 && (
+                <div style={{ marginTop: 8, padding: "8px 10px", background: C.bg, borderRadius: 3, maxHeight: 90, overflowY: "auto" }}>
+                  {selectedCars.map(function(c, i) { return <div key={i} style={{ fontSize: 12, color: C.ts, lineHeight: 2 }}><span style={{ color: C.ac, marginRight: 6 }}>›</span>{c}</div>; })}
+                </div>
+              )}
+            </div>
+
+            {/* Track Map */}
+            {(game && track) && (function() {
+              var key = game + "||" + track;
+              var svg = trackMaps[key];
+              var loading2 = trackMapLoading === key;
+              return (
+                <div style={{ borderBottom: "1px solid " + C.bd }}>
+                  <div style={{ padding: "8px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>TRACK MAP</span>
+                    {!svg && !loading2 && (
+                      <button onClick={function() { fetchTrackMap(game, track); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 8, letterSpacing: 0.5 }}>GENERATE</button>
+                    )}
+                    {svg && (
+                      <button onClick={function() {
+                        setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[key]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
+                      }} style={{ padding: "2px 8px", background: "transparent", border: "none", borderRadius: 2, color: C.td, fontSize: 8 }}>↺</button>
+                    )}
+                  </div>
+                  <div style={{ padding: "0 10px 10px" }}>
+                    {loading2 && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>SEARCHING CIRCUIT</span></div>}
+                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#fff" }}><img src={svg} alt={trackName} style={{ width: "100%", height: "auto", display: "block" }} /></div>}
+                    {svg === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Map not found on Wikimedia</div>}
+                    {!svg && !loading2 && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>No map loaded yet</div>}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Actions */}
+            <div style={{ padding: "10px 12px", borderBottom: "1px solid " + C.bd, display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={saveSetup} disabled={messages.length < 2} style={{ width: "100%", padding: "8px", background: messages.length >= 2 ? C.acg : "transparent", border: "1px solid " + (messages.length >= 2 ? C.ac : C.bd), borderRadius: 3, color: messages.length >= 2 ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, cursor: messages.length >= 2 ? "pointer" : "not-allowed", textTransform: "uppercase" }}>
+                SAVE A COPY
+              </button>
+              <button onClick={function() { setStep("config"); }} style={{ width: "100%", padding: "7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase" }}>
+                BACK TO CONFIGURE
+              </button>
+            </div>
+
+            {/* Quick feedback */}
+            <div style={{ padding: "10px 14px 4px", fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>DRIVER FEEDBACK</div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+              {qf.map(function(f, i) {
+                return (
+                  <button key={i} onClick={function() { if (!loading) sendMsg(f); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", marginBottom: 2, background: "transparent", border: "1px solid transparent", borderRadius: 3, color: C.ts, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1, lineHeight: 1.4 }}>
+                    {f}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Main chat */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {/* Chat topbar */}
+          <div style={{ height: 40, flexShrink: 0, padding: "0 16px", borderBottom: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={function() { setSidebarOpen(!sidebarOpen); }} style={{ background: "none", border: "none", color: C.td, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>{sidebarOpen ? "◁" : "▷"}</button>
+            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, color: C.tm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0.5, flex: 1, minWidth: 0 }}>
+              {cg ? <span style={{ color: C.ts }}>{cg.name}</span> : ""}
+              {cc ? <span style={{ color: C.td }}> › {cc.name}</span> : ""}
+              {track ? <span style={{ color: C.td }}> › {track}</span> : ""}
+              {condition && track ? <span style={{ color: condition === "Wet" ? "#60a5fa" : C.warn }}> › {condition}</span> : ""}
+              {sessionType && track ? <span style={{ color: C.td }}> › {sessionType === "qualifying" ? "QUALI" : "RACE" + (raceLaps ? " " + raceLaps + "L" : "")}</span> : ""}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
+            {messages.length === 0 && !loading && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center" }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 36, letterSpacing: 7, opacity: 0.05, color: C.tx, marginBottom: 16 }}>ENGINEER</div>
+                <div style={{ fontSize: 14, color: C.td, marginBottom: 10 }}>No active engineer session</div>
+                <div style={{ fontSize: 13, color: C.td, marginBottom: 24 }}>Configure your car, track, and session type, then generate a setup</div>
+                <button onClick={function() { setStep("config"); }} style={{ padding: "9px 22px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, cursor: "pointer" }}>GO TO CONFIGURE</button>
+              </div>
+            )}
+            {messages.map(function(m, i) {
+              var u = m.role === "user";
+              return (
+                <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
+                  {u
+                    ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
+                    : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content)}</div>
+                  }
+                </div>
+              );
+            })}
+            {loading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", color: C.td }}>
+                <Loader />
+                <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2 }}>ANALYZING TELEMETRY</span>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input */}
+          <div style={{ padding: "14px 22px", borderTop: "1px solid " + C.bd, background: C.sf, flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+              <textarea value={input} onChange={function(e) { setInput(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!loading) sendMsg(input); } }} placeholder="Describe car behavior, request adjustments, or ask about strategy..." rows={2}
+                style={{ flex: 1, resize: "none", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 14, lineHeight: 1.6 }} />
+              <button onClick={function() { if (!loading) sendMsg(input); }} disabled={loading || !input.trim()} style={{ padding: "11px 26px", background: (loading || !input.trim()) ? C.bd : C.ac, border: "none", borderRadius: 4, color: (loading || !input.trim()) ? C.td : "#000", fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1.5, cursor: (loading || !input.trim()) ? "not-allowed" : "pointer", textTransform: "uppercase", height: 50, flexShrink: 0 }}>
+                SEND
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <Toast /><DiscardModal />
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
