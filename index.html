@@ -26,6 +26,7 @@
   @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -195,34 +196,74 @@ function parseTableParams(text) {
 
 function renderMd(text, prevText) {
   var prevParams = prevText ? parseTableParams(prevText) : {};
-  return text.split("\n").map(function(l, i) {
-    if (l.startsWith("### ")) return <h4 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, margin: "16px 0 6px", textTransform: "uppercase", letterSpacing: 2 }}>{l.slice(4)}</h4>;
-    if (l.startsWith("## ")) return <h3 key={i} style={{ color: C.tx, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, margin: "22px 0 8px", borderBottom: "1px solid " + C.bd, paddingBottom: 7 }}>{l.slice(3)}</h3>;
-    if (l.startsWith("# ")) return <h2 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 17, margin: "26px 0 10px" }}>{l.slice(2)}</h2>;
-    var b = l.replace(/\*\*(.+?)\*\*/g, '<strong style="color:' + C.tx + '">' + "$1" + '</strong>');
-    if (l.startsWith("- ") || l.startsWith("* ")) return (<div key={i} style={{ display: "flex", gap: 9, marginLeft: 8, lineHeight: 1.75, fontSize: 13.5, color: C.ts }}><span style={{ color: C.ac, flexShrink: 0 }}>›</span><span dangerouslySetInnerHTML={{ __html: b.replace(/^[-*] /, "") }} /></div>);
+  var lines = text.split("\n");
+  var result = [];
+  var i = 0;
+  while (i < lines.length) {
+    var l = lines[i];
+    // Collect consecutive table lines into one <table>
     if (l.startsWith("|") && l.endsWith("|")) {
-      if (l.includes("---")) return null;
-      var cells = l.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim(); });
-      // Diff: check if this param value changed vs previous assistant message
-      var paramKey = cells[0] ? cells[0].replace(/\*\*/g, "").toLowerCase() : "";
-      var prevVal = prevParams[paramKey];
-      var currVal = cells.slice(1).join("|");
-      var changed = prevText && prevVal !== undefined && prevVal !== currVal;
-      return (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(" + cells.length + ", 1fr)", gap: 1, marginBottom: 1, background: changed ? "rgba(249,115,22,0.12)" : "transparent", borderRadius: changed ? 2 : 0 }}>
-          {cells.map(function(cell, ci) {
-            return (
-              <div key={ci} style={{ background: ci === 0 ? (changed ? "rgba(249,115,22,0.18)" : C.acs) : (changed ? "rgba(249,115,22,0.08)" : C.sfh), padding: "6px 11px", fontSize: 12.5, fontWeight: ci === 0 ? 500 : 400, color: ci === 0 ? C.acb : (changed ? C.ac : C.ts), borderLeft: ci === 0 ? "2px solid " + (changed ? C.ac : C.ac) : "none" }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />
-            );
-          })}
-        </div>
-      );
+      var tableLines = [];
+      while (i < lines.length && lines[i].startsWith("|") && lines[i].endsWith("|")) {
+        if (!lines[i].includes("---")) tableLines.push(lines[i]);
+        i++;
+      }
+      if (tableLines.length > 0) {
+        // Determine max column count
+        var colCount = tableLines.reduce(function(mx, tl) {
+          return Math.max(mx, tl.split("|").filter(function(x) { return x.trim(); }).length);
+        }, 0);
+        var colW = ["40%"];
+        for (var ci2 = 1; ci2 < colCount; ci2++) colW.push((60 / (colCount - 1)) + "%");
+        result.push(
+          <table key={"tbl-" + i} style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 1px", marginBottom: 8 }}>
+            <colgroup>
+              {colW.map(function(w, wi) { return <col key={wi} style={{ width: w }} />; })}
+            </colgroup>
+            <tbody>
+              {tableLines.map(function(tl, ri) {
+                var cells = tl.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim(); });
+                var paramKey = cells[0] ? cells[0].replace(/\*\*/g, "").toLowerCase() : "";
+                var prevVal = prevParams[paramKey];
+                var currVal = cells.slice(1).join("|");
+                var changed = prevText && ri > 0 && prevVal !== undefined && prevVal !== currVal;
+                return (
+                  <tr key={ri}>
+                    {cells.map(function(cell, ci) {
+                      var isFirst = ci === 0;
+                      var isHeader = ri === 0;
+                      return (
+                        <td key={ci} style={{
+                          padding: "6px 11px", fontSize: 12.5,
+                          fontWeight: isFirst || isHeader ? 500 : 400,
+                          color: isHeader ? C.acb : (changed ? C.ac : (isFirst ? C.acb : C.ts)),
+                          background: isHeader ? C.acs : (changed ? (isFirst ? "rgba(249,115,22,0.22)" : "rgba(249,115,22,0.10)") : (isFirst ? C.acs : C.sfh)),
+                          borderLeft: isFirst ? "2px solid " + C.ac : "none",
+                          borderTop: changed && !isHeader ? "1px solid rgba(249,115,22,0.3)" : "none",
+                          borderBottom: changed && !isHeader ? "1px solid rgba(249,115,22,0.3)" : "none",
+                        }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        );
+      }
+      continue;
     }
-    if (l.startsWith("```")) return null;
-    if (!l.trim()) return <div key={i} style={{ height: 9 }} />;
-    return <p key={i} style={{ margin: "3px 0", lineHeight: 1.75, fontSize: 13.5, color: C.ts }} dangerouslySetInnerHTML={{ __html: b }} />;
-  });
+    if (l.startsWith("### ")) { result.push(<h4 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, margin: "16px 0 6px", textTransform: "uppercase", letterSpacing: 2 }}>{l.slice(4)}</h4>); i++; continue; }
+    if (l.startsWith("## ")) { result.push(<h3 key={i} style={{ color: C.tx, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, margin: "22px 0 8px", borderBottom: "1px solid " + C.bd, paddingBottom: 7 }}>{l.slice(3)}</h3>); i++; continue; }
+    if (l.startsWith("# ")) { result.push(<h2 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 17, margin: "26px 0 10px" }}>{l.slice(2)}</h2>); i++; continue; }
+    var b = l.replace(/\*\*(.+?)\*\*/g, '<strong style="color:' + C.tx + '">' + "$1" + '</strong>');
+    if (l.startsWith("- ") || l.startsWith("* ")) { result.push(<div key={i} style={{ display: "flex", gap: 9, marginLeft: 8, lineHeight: 1.75, fontSize: 13.5, color: C.ts }}><span style={{ color: C.ac, flexShrink: 0 }}>›</span><span dangerouslySetInnerHTML={{ __html: b.replace(/^[-*] /, "") }} /></div>); i++; continue; }
+    if (l.startsWith("```")) { i++; continue; }
+    if (!l.trim()) { result.push(<div key={i} style={{ height: 9 }} />); i++; continue; }
+    result.push(<p key={i} style={{ margin: "3px 0", lineHeight: 1.75, fontSize: 13.5, color: C.ts }} dangerouslySetInnerHTML={{ __html: b }} />);
+    i++;
+  }
+  return result;
 }
 
 // ── SUPABASE NOT CONFIGURED SCREEN ───────────────────────────────────────────
@@ -757,6 +798,261 @@ function App() {
     var blob = new Blob([csv], { type: "text/csv" }); var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Setup_" + s.track.replace(/\W/g, "_") + ".csv"; a.click();
   }
 
+  function exportPdf(s, trackMapUrl) {
+    var jsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDF) { alert("jsPDF não carregado. Aguarde e tente novamente."); return; }
+    var doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    var pw = 210; var ph = 297;
+    var ml = 14; var mr = 14; var cw = pw - ml - mr;
+    var y = 0;
+
+    // ── HEADER BAR ──────────────────────────────────────────────────────────
+    doc.setFillColor(15, 15, 18);
+    doc.rect(0, 0, pw, ph, "F"); // full page dark bg
+
+    doc.setFillColor(20, 20, 24);
+    doc.rect(0, 0, pw, 22, "F");
+
+    // Orange left accent
+    doc.setFillColor(249, 115, 22);
+    doc.rect(0, 0, 3, 22, "F");
+
+    // PW box
+    doc.setFillColor(249, 115, 22);
+    doc.setDrawColor(249, 115, 22);
+    doc.rect(ml, 4, 14, 14, "S");
+    doc.setTextColor(249, 115, 22);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("PW", ml + 7, 12.5, { align: "center" });
+
+    // Title
+    doc.setTextColor(220, 220, 226);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("PIT WALL", ml + 18, 11);
+    doc.setTextColor(168, 168, 180);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.text("SETUP ENGINEER", ml + 18, 16);
+
+    // Date top right
+    doc.setTextColor(70, 70, 78);
+    doc.setFontSize(7);
+    doc.text(new Date(s.ts).toLocaleDateString("pt-BR"), pw - mr, 12, { align: "right" });
+
+    y = 30;
+
+    // ── SESSION INFO BLOCK ───────────────────────────────────────────────────
+    doc.setFillColor(20, 20, 24);
+    doc.roundedRect(ml, y, cw, 28, 2, 2, "F");
+
+    // Orange tag (session type)
+    var stLabel = s.sessionType === "qualifying" ? "QUALIFYING" : ("RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : ""));
+    var stColor = s.sessionType === "qualifying" ? [245, 158, 11] : [249, 115, 22];
+    doc.setFillColor.apply(doc, stColor);
+    doc.roundedRect(ml + 4, y + 4, 28, 5, 1, 1, "F");
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.5);
+    doc.text(stLabel, ml + 18, y + 7.7, { align: "center" });
+
+    // Track name
+    doc.setTextColor(220, 220, 226);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(s.track, ml + 4, y + 17);
+
+    // Meta row
+    doc.setTextColor(168, 168, 180);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(s.game + "  ·  " + s.category + "  ·  " + s.condition, ml + 4, y + 23);
+
+    // Cars
+    doc.setTextColor(112, 112, 120);
+    doc.setFontSize(6.5);
+    var carsText = "Cars: " + s.cars.join(", ");
+    if (doc.getTextWidth(carsText) > cw - 8) carsText = carsText.slice(0, 80) + "…";
+    doc.text(carsText, ml + 4, y + 28.5);
+
+    y += 34;
+
+    // ── TRACK MAP (if available) ─────────────────────────────────────────────
+    if (trackMapUrl && trackMapUrl !== "NOT_FOUND") {
+      try {
+        // Draw a canvas to convert SVG/img → data URL with orange filter
+        var canvas = document.createElement("canvas");
+        canvas.width = 300; canvas.height = 200;
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#0a0a0b"; ctx.fillRect(0, 0, 300, 200);
+        var img2 = new Image();
+        img2.crossOrigin = "anonymous";
+        img2.onload = function() {
+          ctx.filter = "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)";
+          ctx.drawImage(img2, 0, 0, 300, 200);
+          var dataUrl = canvas.toDataURL("image/png");
+          doc.addImage(dataUrl, "PNG", pw - mr - 48, 30, 44, 30);
+          finishPdf(doc, s, y, ml, mr, cw, pw, ph);
+        };
+        img2.onerror = function() { finishPdf(doc, s, y, ml, mr, cw, pw, ph); };
+        img2.src = trackMapUrl;
+        return; // async path
+      } catch(e) { /* fall through */ }
+    }
+    finishPdf(doc, s, y, ml, mr, cw, pw, ph);
+  }
+
+  function finishPdf(doc, s, y, ml, mr, cw, pw, ph) {
+    var accentRgb = [249, 115, 22];
+    var accentDimRgb = [120, 55, 10];
+
+    function newPage() {
+      doc.addPage();
+      // dark bg
+      doc.setFillColor(10, 10, 11);
+      doc.rect(0, 0, pw, ph, "F");
+      // subtle header
+      doc.setFillColor(15, 15, 18);
+      doc.rect(0, 0, pw, 10, "F");
+      doc.setFillColor.apply(doc, accentRgb);
+      doc.rect(0, 0, 3, 10, "F");
+      doc.setTextColor(70, 70, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.text("PIT WALL  ·  " + s.track.toUpperCase(), ml, 7);
+      return 16;
+    }
+
+    function checkY(needed) {
+      if (y + needed > ph - 14) { y = newPage(); }
+    }
+
+    // Parse setup text
+    var setupText = s.messages.filter(function(m) { return m.role === "assistant"; }).map(function(m) { return m.content; }).join("\n\n---\n\n");
+    var sLines = setupText.split("\n");
+    var sections = []; // [{title, rows: [{cells}]}]
+    var curSection = null;
+
+    sLines.forEach(function(l) {
+      var t = l.trim();
+      if (t.startsWith("## ") || t.startsWith("# ") || t.startsWith("### ")) {
+        curSection = { title: t.replace(/^#+\s*/, ""), rows: [], bullets: [] };
+        sections.push(curSection);
+      } else if (t.startsWith("|") && t.endsWith("|") && !t.includes("---")) {
+        var cells = t.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, ""); });
+        if (!curSection) { curSection = { title: "", rows: [], bullets: [] }; sections.push(curSection); }
+        curSection.rows.push(cells);
+      } else if ((t.startsWith("- ") || t.startsWith("* ")) && curSection) {
+        curSection.bullets.push(t.replace(/^[-*]\s*/, "").replace(/\*\*/g, ""));
+      }
+    });
+
+    sections.forEach(function(sec) {
+      if (!sec.title && sec.rows.length === 0 && sec.bullets.length === 0) return;
+
+      // Section header
+      checkY(14);
+      doc.setFillColor(249, 115, 22);
+      doc.rect(ml, y, 2, 7, "F");
+      doc.setTextColor.apply(doc, accentRgb);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text(sec.title.toUpperCase(), ml + 5, y + 5.5);
+      y += 11;
+
+      // Table
+      if (sec.rows.length > 0) {
+        var colCount = sec.rows.reduce(function(mx, r) { return Math.max(mx, r.length); }, 0);
+        var paramW = cw * 0.42;
+        var valW = (cw - paramW) / Math.max(colCount - 1, 1);
+
+        sec.rows.forEach(function(row, ri) {
+          checkY(7);
+          var isHeader = ri === 0;
+          var rowH = 6.5;
+
+          if (isHeader) {
+            doc.setFillColor(30, 25, 18);
+          } else {
+            doc.setFillColor(ri % 2 === 0 ? 18 : 22, ri % 2 === 0 ? 18 : 22, ri % 2 === 0 ? 20 : 24);
+          }
+          doc.rect(ml, y, cw, rowH, "F");
+
+          // Orange left border
+          doc.setFillColor.apply(doc, accentRgb);
+          doc.rect(ml, y, 2, rowH, "F");
+
+          row.forEach(function(cell, ci) {
+            var x = ml + 2 + (ci === 0 ? 2 : paramW + (ci - 1) * valW);
+            var cellW = ci === 0 ? paramW - 2 : valW;
+            doc.setTextColor.apply(doc, isHeader ? accentRgb : (ci === 0 ? [251, 146, 60] : [168, 168, 180]));
+            doc.setFont("helvetica", isHeader || ci === 0 ? "bold" : "normal");
+            doc.setFontSize(7);
+            var txt = cell.length > 38 ? cell.slice(0, 36) + "…" : cell;
+            doc.text(txt, x + 2, y + 4.5, { maxWidth: cellW - 3 });
+          });
+          y += rowH + 1;
+        });
+        y += 3;
+      }
+
+      // Bullets
+      sec.bullets.forEach(function(b) {
+        checkY(6);
+        doc.setFillColor.apply(doc, accentRgb);
+        doc.circle(ml + 4, y + 2.5, 0.8, "F");
+        doc.setTextColor(168, 168, 180);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        var wrapped = doc.splitTextToSize(b, cw - 10);
+        doc.text(wrapped, ml + 8, y + 4);
+        y += wrapped.length * 4.5 + 1;
+      });
+    });
+
+    // ── NOTES ───────────────────────────────────────────────────────────────
+    if (s.notes && s.notes.trim()) {
+      checkY(20);
+      doc.setFillColor(20, 20, 24);
+      doc.roundedRect(ml, y, cw, 8, 1, 1, "F");
+      doc.setFillColor.apply(doc, accentRgb);
+      doc.rect(ml, y, 2, 8, "F");
+      doc.setTextColor.apply(doc, accentRgb);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.text("ANOTAÇÕES DE PISTA", ml + 5, y + 5.5);
+      y += 11;
+      doc.setFillColor(18, 18, 21);
+      var noteLines = doc.splitTextToSize(s.notes, cw - 8);
+      var noteH = noteLines.length * 4.5 + 8;
+      checkY(noteH);
+      doc.roundedRect(ml, y, cw, noteH, 1, 1, "F");
+      doc.setTextColor(168, 168, 180);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.text(noteLines, ml + 4, y + 6);
+      y += noteH + 4;
+    }
+
+    // ── FOOTER on last page ──────────────────────────────────────────────────
+    var totalPages = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setFillColor(15, 15, 18);
+      doc.rect(0, ph - 10, pw, 10, "F");
+      doc.setFillColor.apply(doc, accentRgb);
+      doc.rect(0, ph - 10, 3, 10, "F");
+      doc.setTextColor(70, 70, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.text("PIT WALL  ·  SETUP ENGINEER", ml, ph - 4);
+      doc.text(p + " / " + totalPages, pw - mr, ph - 4, { align: "right" });
+    }
+
+    doc.save("PitWall_" + s.track.replace(/\W/g, "_") + "_" + (s.sessionType === "qualifying" ? "QUALI" : "RACE") + ".pdf");
+  }
+
   var qf = ["Understeer at corner entry","Oversteer on corner exit","Unstable under braking","No rear traction on throttle","Bottoming out on straights","Too stiff over kerbs","Excessive tyre degradation","Loose at high speed","Need more front grip in slow corners","Poor braking performance"];
 
   // ── SHARED HEADER ───────────────────────────────────────────────────────────
@@ -1043,6 +1339,7 @@ function App() {
                   <div style={{ fontSize: 12, color: C.tm, marginBottom: 16 }}>Cars: <span style={{ color: C.ts }}>{selectedSetup.cars.join(", ")}</span></div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button onClick={function() { continueFromSetup(selectedSetup); }} style={{ padding: "7px 16px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>CONTINUE IN ENGINEER</button>
+                    <button onClick={function() { exportPdf(selectedSetup, trackMaps[(selectedSetup.gameKey || "") + "||" + selectedSetup.track]); }} style={{ padding: "7px 14px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>EXPORT PDF</button>
                     <button onClick={function() { exportTxt(selectedSetup); }} style={{ padding: "7px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT TXT</button>
                     <button onClick={function() { exportCsv(selectedSetup); }} style={{ padding: "7px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT CSV</button>
                   </div>
