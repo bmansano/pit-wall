@@ -181,7 +181,20 @@ function Loader() {
   return <span style={{ color: C.ac, letterSpacing: 4, fontSize: 11, fontFamily: "monospace" }}>{"■".repeat(d + 1)}</span>;
 }
 
-function renderMd(text) {
+// Parse table rows from assistant message into {paramLower: valueStr} for diff
+function parseTableParams(text) {
+  var result = {};
+  (text || "").split("\n").forEach(function(l) {
+    if (l.startsWith("|") && l.endsWith("|") && !l.includes("---")) {
+      var cells = l.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, ""); });
+      if (cells.length >= 2) result[cells[0].toLowerCase()] = cells.slice(1).join("|");
+    }
+  });
+  return result;
+}
+
+function renderMd(text, prevText) {
+  var prevParams = prevText ? parseTableParams(prevText) : {};
   return text.split("\n").map(function(l, i) {
     if (l.startsWith("### ")) return <h4 key={i} style={{ color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, margin: "16px 0 6px", textTransform: "uppercase", letterSpacing: 2 }}>{l.slice(4)}</h4>;
     if (l.startsWith("## ")) return <h3 key={i} style={{ color: C.tx, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, margin: "22px 0 8px", borderBottom: "1px solid " + C.bd, paddingBottom: 7 }}>{l.slice(3)}</h3>;
@@ -191,7 +204,20 @@ function renderMd(text) {
     if (l.startsWith("|") && l.endsWith("|")) {
       if (l.includes("---")) return null;
       var cells = l.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim(); });
-      return (<div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(" + cells.length + ", 1fr)", gap: 1, marginBottom: 1 }}>{cells.map(function(cell, ci) { return (<div key={ci} style={{ background: ci === 0 ? C.acs : C.sfh, padding: "6px 11px", fontSize: 12.5, fontWeight: ci === 0 ? 500 : 400, color: ci === 0 ? C.acb : C.ts, borderLeft: ci === 0 ? "2px solid " + C.ac : "none" }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />); })}</div>);
+      // Diff: check if this param value changed vs previous assistant message
+      var paramKey = cells[0] ? cells[0].replace(/\*\*/g, "").toLowerCase() : "";
+      var prevVal = prevParams[paramKey];
+      var currVal = cells.slice(1).join("|");
+      var changed = prevText && prevVal !== undefined && prevVal !== currVal;
+      return (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(" + cells.length + ", 1fr)", gap: 1, marginBottom: 1, background: changed ? "rgba(249,115,22,0.12)" : "transparent", borderRadius: changed ? 2 : 0 }}>
+          {cells.map(function(cell, ci) {
+            return (
+              <div key={ci} style={{ background: ci === 0 ? (changed ? "rgba(249,115,22,0.18)" : C.acs) : (changed ? "rgba(249,115,22,0.08)" : C.sfh), padding: "6px 11px", fontSize: 12.5, fontWeight: ci === 0 ? 500 : 400, color: ci === 0 ? C.acb : (changed ? C.ac : C.ts), borderLeft: ci === 0 ? "2px solid " + (changed ? C.ac : C.ac) : "none" }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />
+            );
+          })}
+        </div>
+      );
     }
     if (l.startsWith("```")) return null;
     if (!l.trim()) return <div key={i} style={{ height: 9 }} />;
@@ -429,6 +455,9 @@ function App() {
   var _setups = useState([]); var savedSetups = _setups[0]; var setSavedSetups = _setups[1];
   var _selSetup = useState(null); var selectedSetup = _selSetup[0]; var setSelectedSetup = _selSetup[1];
   var _historyGame = useState(null); var historyGame = _historyGame[0]; var setHistoryGame = _historyGame[1];
+  // Notes editing state
+  var _editingNotes = useState(null); var editingNotesId = _editingNotes[0]; var setEditingNotesId = _editingNotes[1];
+  var _notesText = useState(""); var notesText = _notesText[0]; var setNotesText = _notesText[1];
   // Track maps cache (in-memory + localStorage)
   var _tmaps = useState(function() {
     try {
@@ -625,6 +654,7 @@ function App() {
       sessionType, raceLaps,
       messages: messages.slice(),
       ts: new Date().toISOString(),
+      notes: "",
     };
     var n = [s].concat(savedSetups);
     setSavedSetups(n); persistSetups(n);
@@ -636,6 +666,14 @@ function App() {
     var n = savedSetups.filter(function(s) { return s.id !== id; });
     setSavedSetups(n); persistSetups(n);
     if (selectedSetup && selectedSetup.id === id) setSelectedSetup(null);
+  }
+
+  function updateSetupNotes(id, notes) {
+    var n = savedSetups.map(function(s) { return s.id === id ? Object.assign({}, s, { notes: notes }) : s; });
+    setSavedSetups(n); persistSetups(n);
+    if (selectedSetup && selectedSetup.id === id) setSelectedSetup(Object.assign({}, selectedSetup, { notes: notes }));
+    setEditingNotesId(null);
+    setToast("Notas salvas!");
   }
 
   function discardSession() {
@@ -985,61 +1023,90 @@ function App() {
         setTimeout(function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }, 0);
       }
       // Detail view
+      var _mapKey2 = (selectedSetup.gameKey || "") + "||" + selectedSetup.track;
+      var _mapSvg = trackMaps[_mapKey2];
+      var _mapLoading2 = trackMapLoading === _mapKey2;
       return (
         <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
           <Header />
           <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
             <div>
               <button onClick={function() { setSelectedSetup(null); }} style={{ background: "none", border: "none", color: C.ts, fontSize: 12, cursor: "pointer", marginBottom: 20, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>← BACK TO SAVED SETUPS</button>
-              <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "20px 24px", marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                  <div>
-                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1.5, marginBottom: 7 }}>{selectedSetup.game}</div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: C.tx, marginBottom: 3 }}>{selectedSetup.track}</div>
-                    <div style={{ fontSize: 13, color: C.ts }}>{selectedSetup.category}  ·  {selectedSetup.condition}  ·  <span style={{ color: C.ac }}>{selectedSetup.sessionType === "qualifying" ? "Qualifying" : "Race" + (selectedSetup.raceLaps ? " · " + selectedSetup.raceLaps + " laps" : "")}</span></div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={function() { exportTxt(selectedSetup); }} style={{ padding: "5px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT TXT</button>
-                      <button onClick={function() { exportCsv(selectedSetup); }} style={{ padding: "5px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT CSV</button>
-                    </div>
+
+              {/* Header card: info + map side by side */}
+              <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "20px 24px", marginBottom: 16, display: "flex", gap: 20, alignItems: "flex-start" }}>
+                {/* Left: info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1.5, marginBottom: 7 }}>{selectedSetup.game}</div>
+                  <div style={{ fontSize: 20, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{selectedSetup.track}</div>
+                  <div style={{ fontSize: 13, color: C.ts, marginBottom: 10 }}>{selectedSetup.category}  ·  {selectedSetup.condition}  ·  <span style={{ color: C.ac }}>{selectedSetup.sessionType === "qualifying" ? "Qualifying" : "Race" + (selectedSetup.raceLaps ? " · " + selectedSetup.raceLaps + " laps" : "")}</span></div>
+                  <div style={{ fontSize: 12, color: C.tm, marginBottom: 16 }}>Cars: <span style={{ color: C.ts }}>{selectedSetup.cars.join(", ")}</span></div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button onClick={function() { continueFromSetup(selectedSetup); }} style={{ padding: "7px 16px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>CONTINUE IN ENGINEER</button>
+                    <button onClick={function() { exportTxt(selectedSetup); }} style={{ padding: "7px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT TXT</button>
+                    <button onClick={function() { exportCsv(selectedSetup); }} style={{ padding: "7px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT CSV</button>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: C.tm }}>Cars: <span style={{ color: C.ts }}>{selectedSetup.cars.join(", ")}</span></div>
-              </div>
-              {(function() {
-                var key = (selectedSetup.gameKey || "") + "||" + selectedSetup.track;
-                var svg = trackMaps[key];
-                var loading2 = trackMapLoading === key;
-                return (
-                  <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "16px 20px", marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                      <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>TRACK MAP — {selectedSetup.track.toUpperCase()}</span>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {svg && <button onClick={function() {
-                          setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[key]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
-                          fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track);
-                        }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 8, letterSpacing: 0.5 }}>↺ REGENERATE</button>}
-                        {!svg && !loading2 && <button onClick={function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1 }}>LOAD TRACK MAP</button>}
-                      </div>
-                    </div>
-                    {loading2 && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 0", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>SEARCHING CIRCUIT LAYOUT...</span></div>}
-                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#fff" }}><img src={svg} alt={selectedSetup.track} style={{ width: "100%", height: "auto", display: "block" }} /></div>}
-                    {svg === "NOT_FOUND" && <div style={{ color: C.td, fontSize: 12, textAlign: "center", padding: "14px 0" }}>Map not found — try regenerate or check the track name</div>}
-                    {!svg && !loading2 && <div style={{ color: C.td, fontSize: 12, textAlign: "center", padding: "14px 0" }}>Click "Load Track Map" to fetch the real circuit layout</div>}
-                  </div>
-                );
-              })()}
 
+                {/* Right: track map thumbnail */}
+                <div style={{ flexShrink: 0, width: 200 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>TRACK MAP</span>
+                    {_mapSvg && _mapSvg !== "NOT_FOUND" && (
+                      <button onClick={function() {
+                        setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[_mapKey2]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
+                        fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track);
+                      }} style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: 0 }}>↺</button>
+                    )}
+                    {!_mapSvg && !_mapLoading2 && (
+                      <button onClick={function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }} style={{ padding: "2px 8px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontSize: 8, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1 }}>LOAD</button>
+                    )}
+                  </div>
+                  <div style={{ borderRadius: 4, overflow: "hidden", border: "1px solid " + C.bd, background: "#0a0a0b", height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {_mapLoading2 && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}><Loader /><span style={{ fontSize: 8, color: C.td, letterSpacing: 1 }}>LOADING</span></div>}
+                    {_mapSvg && _mapSvg !== "NOT_FOUND" && <img src={_mapSvg} alt={selectedSetup.track} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", filter: "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} />}
+                    {_mapSvg === "NOT_FOUND" && <span style={{ fontSize: 10, color: C.td }}>Not found</span>}
+                    {!_mapSvg && !_mapLoading2 && <span style={{ fontSize: 10, color: C.td }}>No map</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes card */}
+              <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "16px 20px", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>ANOTAÇÕES DE PISTA</span>
+                  {editingNotesId !== selectedSetup.id
+                    ? <button onClick={function() { setEditingNotesId(selectedSetup.id); setNotesText(selectedSetup.notes || ""); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1, cursor: "pointer" }}>EDITAR</button>
+                    : <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={function() { setEditingNotesId(null); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1, cursor: "pointer" }}>CANCELAR</button>
+                        <button onClick={function() { updateSetupNotes(selectedSetup.id, notesText); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>SALVAR</button>
+                      </div>
+                  }
+                </div>
+                {editingNotesId === selectedSetup.id
+                  ? <textarea value={notesText} onChange={function(e) { setNotesText(e.target.value); }} placeholder="Anote aqui suas observações após testar na pista: comportamento do carro, ajustes necessários, comparativo de voltas..." rows={4}
+                      style={{ width: "100%", padding: "10px 12px", background: C.bg, border: "1px solid " + C.ac, borderRadius: 3, color: C.tx, fontSize: 13, lineHeight: 1.6, resize: "vertical", boxSizing: "border-box" }} />
+                  : <div style={{ fontSize: 13, color: selectedSetup.notes ? C.ts : C.td, lineHeight: 1.7, whiteSpace: "pre-wrap", minHeight: 28 }}>
+                      {selectedSetup.notes || "Nenhuma anotação. Clique em EDITAR para adicionar observações após testar na pista."}
+                    </div>
+                }
+              </div>
+
+              {/* Setup messages */}
               <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "22px 26px" }}>
                 {selectedSetup.messages.map(function(m, i) {
                   var u = m.role === "user";
+                  var prevAst = null;
+                  if (!u) {
+                    for (var pi = i - 1; pi >= 0; pi--) {
+                      if (selectedSetup.messages[pi].role === "assistant") { prevAst = selectedSetup.messages[pi].content; break; }
+                    }
+                  }
                   return (
                     <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
                       {u
                         ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
-                        : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content)}</div>
+                        : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAst)}</div>
                       }
                     </div>
                   );
@@ -1169,7 +1236,7 @@ function App() {
                   </div>
                   <div style={{ padding: "0 10px 10px" }}>
                     {loading2 && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>SEARCHING CIRCUIT</span></div>}
-                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#fff" }}><img src={svg} alt={track} style={{ width: "100%", height: "auto", display: "block" }} /></div>}
+                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={svg} alt={track} style={{ width: "100%", height: "auto", display: "block", filter: "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
                     {svg === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Map not found on Wikimedia</div>}
                     {!svg && !loading2 && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>No map loaded yet</div>}
                   </div>
@@ -1227,11 +1294,18 @@ function App() {
             )}
             {messages.map(function(m, i) {
               var u = m.role === "user";
+              // Find previous assistant message for diff (only for follow-up responses, not first setup)
+              var prevAssistant = null;
+              if (!u && i > 0) {
+                for (var pi = i - 1; pi >= 0; pi--) {
+                  if (messages[pi].role === "assistant") { prevAssistant = messages[pi].content; break; }
+                }
+              }
               return (
                 <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
                   {u
                     ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
-                    : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content)}</div>
+                    : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAssistant)}</div>
                   }
                 </div>
               );
