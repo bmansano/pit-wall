@@ -531,7 +531,7 @@ function App() {
 
   var hasSession = messages.length > 0;
 
-  useEffect(function() { loadSetups(); }, []);
+  useEffect(function() { if (user) loadSetups(); }, [user]);
   useEffect(function() { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
   useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
@@ -544,9 +544,30 @@ function App() {
   }, [game, track]);
 
   function loadSetups() {
-    window.storage.get("pit_wall_setups").then(function(r) { if (r && r.value) { try { setSavedSetups(JSON.parse(r.value)); } catch(e) {} } });
+    if (!window.sb || !user) return;
+    window.sb.from("setups").select("*").order("ts", { ascending: false })
+      .then(function(res) {
+        if (res.error) { console.error("loadSetups:", res.error.message); return; }
+        var rows = (res.data || []).map(function(r) { return r.data; });
+        setSavedSetups(rows);
+      });
   }
-  function persistSetups(s) { window.storage.set("pit_wall_setups", JSON.stringify(s)); }
+
+  function persistSetups(list) {
+    // no-op: individual ops (upsert/delete) are used directly
+  }
+
+  function sbUpsertSetup(s) {
+    if (!window.sb || !user) return;
+    window.sb.from("setups").upsert({ id: s.id, user_id: user.id, ts: s.ts, data: s }, { onConflict: "id" })
+      .then(function(res) { if (res.error) console.error("sbUpsertSetup:", res.error.message); });
+  }
+
+  function sbDeleteSetup(id) {
+    if (!window.sb || !user) return;
+    window.sb.from("setups").delete().eq("id", id)
+      .then(function(res) { if (res.error) console.error("sbDeleteSetup:", res.error.message); });
+  }
 
   // Curated Wikimedia Commons filenames for known circuits (exact match = instant, reliable)
   var TRACK_FILES = {
@@ -709,20 +730,23 @@ function App() {
       notes: "",
     };
     var n = [s].concat(savedSetups);
-    setSavedSetups(n); persistSetups(n);
+    setSavedSetups(n);
+    sbUpsertSetup(s);
     setToast("Setup saved!");
-    // Session remains active — user can keep chatting
   }
 
   function deleteSetup(id) {
     var n = savedSetups.filter(function(s) { return s.id !== id; });
-    setSavedSetups(n); persistSetups(n);
+    setSavedSetups(n);
+    sbDeleteSetup(id);
     if (selectedSetup && selectedSetup.id === id) setSelectedSetup(null);
   }
 
   function updateSetupNotes(id, notes) {
     var n = savedSetups.map(function(s) { return s.id === id ? Object.assign({}, s, { notes: notes }) : s; });
-    setSavedSetups(n); persistSetups(n);
+    setSavedSetups(n);
+    var updated = n.find(function(s) { return s.id === id; });
+    if (updated) sbUpsertSetup(updated);
     if (selectedSetup && selectedSetup.id === id) setSelectedSetup(Object.assign({}, selectedSetup, { notes: notes }));
     setEditingNotesId(null);
     setToast("Notas salvas!");
@@ -1411,7 +1435,12 @@ function App() {
           }}>DISCARD SESSION</button>
         )}
 
-        {/* Logout */}
+        {/* User + Logout */}
+        {user && user.email && (
+          <span style={{ fontSize: 10, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", marginRight: 10, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {user.email}
+          </span>
+        )}
         <button onClick={function() { window.sb.auth.signOut(); }} style={{
           padding: "5px 10px", background: "transparent",
           border: "1px solid " + C.bd, borderRadius: 3,
