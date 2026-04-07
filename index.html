@@ -874,121 +874,136 @@ function App() {
   function exportPdf(s, trackMapUrl) {
     var jsPDF = window.jspdf && window.jspdf.jsPDF;
     if (!jsPDF) { alert("jsPDF não carregado. Aguarde e tente novamente."); return; }
-    var doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    var pw = 210; var ph = 297;
-    var ml = 14; var mr = 14; var cw = pw - ml - mr;
-    var y = 0;
 
-    // ── HEADER BAR ──────────────────────────────────────────────────────────
-    doc.setFillColor(15, 15, 18);
-    doc.rect(0, 0, pw, ph, "F"); // full page dark bg
+    function doRender(mapDataUrl) {
+      var doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      var pw = 210; var ph = 297;
+      var ml = 14; var mr = 14; var cw = pw - ml - mr;
+      var ac = [249, 115, 22];
 
-    doc.setFillColor(20, 20, 24);
-    doc.rect(0, 0, pw, 22, "F");
+      // ── PAGE 1 BG ────────────────────────────────────────────────────────
+      doc.setFillColor(10, 10, 11);
+      doc.rect(0, 0, pw, ph, "F");
 
-    // Orange left accent
-    doc.setFillColor(249, 115, 22);
-    doc.rect(0, 0, 3, 22, "F");
+      // ── TOP BAR ──────────────────────────────────────────────────────────
+      doc.setFillColor(15, 15, 18);
+      doc.rect(0, 0, pw, 18, "F");
+      doc.setFillColor.apply(doc, ac);
+      doc.rect(0, 0, 3, 18, "F");
+      // PW box
+      doc.setDrawColor.apply(doc, ac);
+      doc.setFillColor(10, 10, 11);
+      doc.rect(ml, 3, 12, 12, "FD");
+      doc.setTextColor.apply(doc, ac);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.text("PW", ml + 6, 10.5, { align: "center" });
+      // PIT WALL text
+      doc.setTextColor(220, 220, 226);
+      doc.setFontSize(11);
+      doc.text("PIT WALL", ml + 16, 9.5);
+      doc.setTextColor(100, 100, 110);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.5);
+      doc.text("SETUP ENGINEER", ml + 16, 14);
+      // Date
+      doc.setTextColor(70, 70, 78);
+      doc.setFontSize(6.5);
+      doc.text(new Date(s.ts).toLocaleDateString("pt-BR"), pw - mr, 11, { align: "right" });
 
-    // PW box
-    doc.setFillColor(249, 115, 22);
-    doc.setDrawColor(249, 115, 22);
-    doc.rect(ml, 4, 14, 14, "S");
-    doc.setTextColor(249, 115, 22);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("PW", ml + 7, 12.5, { align: "center" });
+      // ── SESSION INFO BLOCK (unified) ─────────────────────────────────────
+      var infoY = 24;
+      // Determine block height based on whether map fits
+      var mapW = 52; var mapH = 38;
+      var hasMap = !!mapDataUrl;
+      var infoW = hasMap ? cw - mapW - 6 : cw;
+      var blockH = 42;
 
-    // Title
-    doc.setTextColor(220, 220, 226);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.text("PIT WALL", ml + 18, 11);
-    doc.setTextColor(168, 168, 180);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    doc.text("SETUP ENGINEER", ml + 18, 16);
+      doc.setFillColor(18, 18, 22);
+      doc.roundedRect(ml, infoY, cw, blockH, 2, 2, "F");
+      // Left orange accent on the block
+      doc.setFillColor.apply(doc, ac);
+      doc.roundedRect(ml, infoY, 3, blockH, 1, 1, "F");
 
-    // Date top right
-    doc.setTextColor(70, 70, 78);
-    doc.setFontSize(7);
-    doc.text(new Date(s.ts).toLocaleDateString("pt-BR"), pw - mr, 12, { align: "right" });
+      // Session type badge
+      var stLabel = s.sessionType === "qualifying" ? "QUALIFYING" : ("RACE" + (s.raceLaps ? "  ·  " + s.raceLaps + " LAPS" : ""));
+      doc.setFillColor.apply(doc, s.sessionType === "qualifying" ? [245, 158, 11] : ac);
+      doc.roundedRect(ml + 6, infoY + 5, doc.getTextWidth(stLabel) * 0.85 + 6, 5.5, 1, 1, "F");
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5);
+      doc.text(stLabel, ml + 9, infoY + 9);
 
-    y = 30;
+      // Track name
+      doc.setTextColor(220, 220, 226);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      var trackLabel = doc.splitTextToSize(s.track, infoW - 12);
+      doc.text(trackLabel, ml + 6, infoY + 19);
 
-    // ── SESSION INFO BLOCK ───────────────────────────────────────────────────
-    doc.setFillColor(20, 20, 24);
-    doc.roundedRect(ml, y, cw, 28, 2, 2, "F");
+      // Meta: simulator · category · condition
+      doc.setTextColor(160, 160, 172);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      var metaY = infoY + 19 + trackLabel.length * 6.5;
+      doc.text(s.game + "  ·  " + s.category + "  ·  " + s.condition, ml + 6, metaY);
 
-    // Orange tag (session type)
-    var stLabel = s.sessionType === "qualifying" ? "QUALIFYING" : ("RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : ""));
-    var stColor = s.sessionType === "qualifying" ? [245, 158, 11] : [249, 115, 22];
-    doc.setFillColor.apply(doc, stColor);
-    doc.roundedRect(ml + 4, y + 4, 28, 5, 1, 1, "F");
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.5);
-    doc.text(stLabel, ml + 18, y + 7.7, { align: "center" });
+      // Cars
+      doc.setTextColor(100, 100, 110);
+      doc.setFontSize(6.5);
+      var carsStr = s.cars.join(", ");
+      var carsLines = doc.splitTextToSize(carsStr, infoW - 12);
+      doc.text(carsLines, ml + 6, metaY + 6);
 
-    // Track name
-    doc.setTextColor(220, 220, 226);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(s.track, ml + 4, y + 17);
+      // Track map inside the block (right side)
+      if (hasMap) {
+        doc.setFillColor(10, 10, 11);
+        doc.roundedRect(ml + infoW + 4, infoY + 2, mapW, blockH - 4, 2, 2, "F");
+        try {
+          doc.addImage(mapDataUrl, "PNG", ml + infoW + 5, infoY + 3, mapW - 2, blockH - 6, undefined, "FAST");
+        } catch(e) {}
+      }
 
-    // Meta row
-    doc.setTextColor(168, 168, 180);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.text(s.game + "  ·  " + s.category + "  ·  " + s.condition, ml + 4, y + 23);
-
-    // Cars
-    doc.setTextColor(112, 112, 120);
-    doc.setFontSize(6.5);
-    var carsText = "Cars: " + s.cars.join(", ");
-    if (doc.getTextWidth(carsText) > cw - 8) carsText = carsText.slice(0, 80) + "…";
-    doc.text(carsText, ml + 4, y + 28.5);
-
-    y += 34;
-
-    // ── TRACK MAP (if available) ─────────────────────────────────────────────
-    if (trackMapUrl && trackMapUrl !== "NOT_FOUND") {
-      try {
-        // Draw a canvas to convert SVG/img → data URL with orange filter
-        var canvas = document.createElement("canvas");
-        canvas.width = 300; canvas.height = 200;
-        var ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#0a0a0b"; ctx.fillRect(0, 0, 300, 200);
-        var img2 = new Image();
-        img2.crossOrigin = "anonymous";
-        img2.onload = function() {
-          ctx.filter = "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)";
-          ctx.drawImage(img2, 0, 0, 300, 200);
-          var dataUrl = canvas.toDataURL("image/png");
-          doc.addImage(dataUrl, "PNG", pw - mr - 48, 30, 44, 30);
-          finishPdf(doc, s, y, ml, mr, cw, pw, ph);
-        };
-        img2.onerror = function() { finishPdf(doc, s, y, ml, mr, cw, pw, ph); };
-        img2.src = trackMapUrl;
-        return; // async path
-      } catch(e) { /* fall through */ }
+      var y = infoY + blockH + 8;
+      finishPdf(doc, s, y, ml, mr, cw, pw, ph);
     }
-    finishPdf(doc, s, y, ml, mr, cw, pw, ph);
+
+    // Render map to canvas then call doRender
+    if (trackMapUrl && trackMapUrl !== "NOT_FOUND") {
+      var canvas = document.createElement("canvas");
+      canvas.width = 400; canvas.height = 280;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#0a0a0b"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      var img2 = new Image();
+      img2.crossOrigin = "anonymous";
+      img2.onload = function() {
+        // Only apply orange filter for Wikimedia SVGs (not custom uploads which are already colored)
+        var isDataUrl = trackMapUrl.startsWith("data:");
+        if (!isDataUrl) ctx.filter = "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)";
+        // Fit image maintaining aspect ratio
+        var scale = Math.min(canvas.width / img2.width, canvas.height / img2.height);
+        var dw = img2.width * scale; var dh = img2.height * scale;
+        var dx = (canvas.width - dw) / 2; var dy = (canvas.height - dh) / 2;
+        ctx.drawImage(img2, dx, dy, dw, dh);
+        doRender(canvas.toDataURL("image/png"));
+      };
+      img2.onerror = function() { doRender(null); };
+      img2.src = trackMapUrl;
+    } else {
+      doRender(null);
+    }
   }
 
   function finishPdf(doc, s, y, ml, mr, cw, pw, ph) {
-    var accentRgb = [249, 115, 22];
-    var accentDimRgb = [120, 55, 10];
+    var ac = [249, 115, 22];
 
     function newPage() {
       doc.addPage();
-      // dark bg
       doc.setFillColor(10, 10, 11);
       doc.rect(0, 0, pw, ph, "F");
-      // subtle header
       doc.setFillColor(15, 15, 18);
       doc.rect(0, 0, pw, 10, "F");
-      doc.setFillColor.apply(doc, accentRgb);
+      doc.setFillColor.apply(doc, ac);
       doc.rect(0, 0, 3, 10, "F");
       doc.setTextColor(70, 70, 78);
       doc.setFont("helvetica", "normal");
@@ -1001,16 +1016,14 @@ function App() {
       if (y + needed > ph - 14) { y = newPage(); }
     }
 
-    // Parse setup text
+    // Parse setup text into sections
     var setupText = s.messages.filter(function(m) { return m.role === "assistant"; }).map(function(m) { return m.content; }).join("\n\n---\n\n");
-    var sLines = setupText.split("\n");
-    var sections = []; // [{title, rows: [{cells}]}]
+    var sections = [];
     var curSection = null;
-
-    sLines.forEach(function(l) {
+    setupText.split("\n").forEach(function(l) {
       var t = l.trim();
       if (t.startsWith("## ") || t.startsWith("# ") || t.startsWith("### ")) {
-        curSection = { title: t.replace(/^#+\s*/, ""), rows: [], bullets: [] };
+        curSection = { title: t.replace(/^#+\s*/, "").replace(/\*\*/g, ""), rows: [], bullets: [] };
         sections.push(curSection);
       } else if (t.startsWith("|") && t.endsWith("|") && !t.includes("---")) {
         var cells = t.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, ""); });
@@ -1024,84 +1037,109 @@ function App() {
     sections.forEach(function(sec) {
       if (!sec.title && sec.rows.length === 0 && sec.bullets.length === 0) return;
 
-      // Section header
-      checkY(14);
-      doc.setFillColor(249, 115, 22);
-      doc.rect(ml, y, 2, 7, "F");
-      doc.setTextColor.apply(doc, accentRgb);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.text(sec.title.toUpperCase(), ml + 5, y + 5.5);
-      y += 11;
+      // ── Section title ────────────────────────────────────────────────────
+      if (sec.title) {
+        checkY(12);
+        // Thin full-width separator line before title
+        doc.setDrawColor(30, 30, 36);
+        doc.line(ml, y, ml + cw, y);
+        y += 3;
+        // Orange accent bar only on the title row
+        doc.setFillColor.apply(doc, ac);
+        doc.rect(ml, y, 3, 6.5, "F");
+        doc.setTextColor.apply(doc, ac);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.text(sec.title.replace(/\*\*/g, "").toUpperCase(), ml + 6, y + 5);
+        y += 10;
+      }
 
-      // Table
+      // ── Table ────────────────────────────────────────────────────────────
       if (sec.rows.length > 0) {
+        // Fixed column widths: first col 42%, remaining split equally
         var colCount = sec.rows.reduce(function(mx, r) { return Math.max(mx, r.length); }, 0);
-        var paramW = cw * 0.42;
-        var valW = (cw - paramW) / Math.max(colCount - 1, 1);
+        var col0W = cw * 0.42;
+        var colRW = colCount > 1 ? (cw - col0W) / (colCount - 1) : 0;
+        // Column X positions (absolute)
+        var colX = [ml]; // col0 starts at ml (no left bar offset — we skip the bar on data rows)
+        for (var ci2 = 1; ci2 < colCount; ci2++) colX.push(ml + col0W + (ci2 - 1) * colRW);
 
         sec.rows.forEach(function(row, ri) {
-          checkY(7);
           var isHeader = ri === 0;
           var rowH = 6.5;
 
+          // Measure tallest cell to size row correctly
+          var maxLines = 1;
+          row.forEach(function(cell, ci) {
+            var w = ci === 0 ? col0W - 4 : colRW - 4;
+            var lines = doc.splitTextToSize(cell.replace(/\*\*/g, ""), w);
+            if (lines.length > maxLines) maxLines = lines.length;
+          });
+          rowH = Math.max(6.5, maxLines * 4.5 + 3);
+
+          checkY(rowH + 1);
+
+          // Row background
           if (isHeader) {
-            doc.setFillColor(30, 25, 18);
+            doc.setFillColor(28, 22, 14);
           } else {
-            doc.setFillColor(ri % 2 === 0 ? 18 : 22, ri % 2 === 0 ? 18 : 22, ri % 2 === 0 ? 20 : 24);
+            doc.setFillColor(ri % 2 === 0 ? 16 : 20, ri % 2 === 0 ? 16 : 20, ri % 2 === 0 ? 18 : 22);
           }
           doc.rect(ml, y, cw, rowH, "F");
 
-          // Orange left border
-          doc.setFillColor.apply(doc, accentRgb);
-          doc.rect(ml, y, 2, rowH, "F");
+          // NO orange bar on data rows — only a subtle left border on header
+          if (isHeader) {
+            doc.setFillColor.apply(doc, ac);
+            doc.rect(ml, y, 2, rowH, "F");
+          }
 
+          // Cell text
           row.forEach(function(cell, ci) {
-            var x = ml + 2 + (ci === 0 ? 2 : paramW + (ci - 1) * valW);
-            var cellW = ci === 0 ? paramW - 2 : valW;
-            doc.setTextColor.apply(doc, isHeader ? accentRgb : (ci === 0 ? [251, 146, 60] : [168, 168, 180]));
-            doc.setFont("helvetica", isHeader || ci === 0 ? "bold" : "normal");
+            var x = colX[ci] + (ci === 0 ? (isHeader ? 5 : 3) : 3);
+            var maxW = ci === 0 ? col0W - (isHeader ? 6 : 4) : colRW - 4;
+            var cellText = cell.replace(/\*\*/g, "");
+            var lines = doc.splitTextToSize(cellText, maxW);
+            doc.setTextColor.apply(doc, isHeader ? ac : (ci === 0 ? [200, 160, 100] : [168, 168, 180]));
+            doc.setFont("helvetica", isHeader ? "bold" : (ci === 0 ? "normal" : "normal"));
             doc.setFontSize(7);
-            var txt = cell.length > 38 ? cell.slice(0, 36) + "…" : cell;
-            doc.text(txt, x + 2, y + 4.5, { maxWidth: cellW - 3 });
+            doc.text(lines, x, y + 4.5);
           });
           y += rowH + 1;
         });
-        y += 3;
+        y += 4;
       }
 
-      // Bullets
+      // ── Bullets ──────────────────────────────────────────────────────────
       sec.bullets.forEach(function(b) {
-        checkY(6);
-        doc.setFillColor.apply(doc, accentRgb);
-        doc.circle(ml + 4, y + 2.5, 0.8, "F");
+        checkY(7);
+        doc.setFillColor(100, 100, 110);
+        doc.circle(ml + 3, y + 3, 0.7, "F");
         doc.setTextColor(168, 168, 180);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(7);
-        var wrapped = doc.splitTextToSize(b, cw - 10);
-        doc.text(wrapped, ml + 8, y + 4);
-        y += wrapped.length * 4.5 + 1;
+        var wrapped = doc.splitTextToSize(b.replace(/\*\*/g, ""), cw - 9);
+        doc.text(wrapped, ml + 6, y + 4.5);
+        y += wrapped.length * 4.5 + 2;
       });
     });
 
-    // ── NOTES ───────────────────────────────────────────────────────────────
+    // ── NOTES ────────────────────────────────────────────────────────────
     if (s.notes && s.notes.trim()) {
-      checkY(20);
-      doc.setFillColor(20, 20, 24);
-      doc.roundedRect(ml, y, cw, 8, 1, 1, "F");
-      doc.setFillColor.apply(doc, accentRgb);
-      doc.rect(ml, y, 2, 8, "F");
-      doc.setTextColor.apply(doc, accentRgb);
+      checkY(22);
+      y += 4;
+      doc.setFillColor.apply(doc, ac);
+      doc.rect(ml, y, 3, 6.5, "F");
+      doc.setTextColor.apply(doc, ac);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.text("ANOTAÇÕES DE PISTA", ml + 5, y + 5.5);
-      y += 11;
-      doc.setFillColor(18, 18, 21);
+      doc.setFontSize(8);
+      doc.text("ANOTAÇÕES DE PISTA", ml + 6, y + 5);
+      y += 10;
+      doc.setFillColor(16, 16, 20);
       var noteLines = doc.splitTextToSize(s.notes, cw - 8);
       var noteH = noteLines.length * 4.5 + 8;
       checkY(noteH);
       doc.roundedRect(ml, y, cw, noteH, 1, 1, "F");
-      doc.setTextColor(168, 168, 180);
+      doc.setTextColor(160, 160, 172);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.text(noteLines, ml + 4, y + 6);
