@@ -569,8 +569,17 @@ function parseTableParams(text) {
   return result;
 }
 
-function renderMd(text, prevText) {
+// opts: { edits, onEdit, editMode, activeCell, setActiveCell, msgIdx }
+function renderMd(text, prevText, opts) {
   var prevParams = prevText ? parseTableParams(prevText) : {};
+  var edits    = (opts && opts.edits)    || {};
+  var onEdit   = (opts && opts.onEdit)   || null;
+  var isEM     = !!(opts && opts.editMode);
+  var aC       = (opts && opts.activeCell) || null;
+  var setAC    = (opts && opts.setActiveCell) || null;
+  var msgIdx   = (opts && opts.msgIdx != null) ? opts.msgIdx : -1;
+  var tblIdx   = 0;
+
   var lines = text.split("\n");
   var result = [];
   var i = 0;
@@ -584,7 +593,7 @@ function renderMd(text, prevText) {
         i++;
       }
       if (tableLines.length > 0) {
-        // Determine max column count
+        var curTbl = tblIdx++;
         var colCount = tableLines.reduce(function(mx, tl) {
           return Math.max(mx, tl.split("|").filter(function(x) { return x.trim(); }).length);
         }, 0);
@@ -599,24 +608,70 @@ function renderMd(text, prevText) {
               {tableLines.map(function(tl, ri) {
                 var cells = tl.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim(); });
                 var paramKey = cells[0] ? cells[0].replace(/\*\*/g, "").toLowerCase() : "";
-                var prevVal = prevParams[paramKey];
-                var currVal = cells.slice(1).join("|");
-                var changed = prevText && ri > 0 && prevVal !== undefined && prevVal !== currVal;
+                var prevVal  = prevParams[paramKey];
+                var currVal  = cells.slice(1).join("|");
+                var changed  = prevText && ri > 0 && prevVal !== undefined && prevVal !== currVal;
+                // edit key is per-row per-table per-message
+                var eKey = msgIdx + ":t" + curTbl + ":" + ri;
+                var isManualEdited = ri > 0 && eKey in edits;
                 return (
                   <tr key={ri}>
                     {cells.map(function(cell, ci) {
-                      var isFirst = ci === 0;
+                      var isFirst  = ci === 0;
                       var isHeader = ri === 0;
+                      var isValCell = !isFirst && !isHeader;
+                      // Display value: manual edit overrides original
+                      var displayVal = (isManualEdited && isValCell) ? edits[eKey] : cell;
+                      // Is this the cell currently being edited?
+                      var isActive = isValCell && aC && aC.key === eKey;
+
+                      // Colors
+                      var clr = isHeader ? C.acb
+                        : isManualEdited ? "#4ade80"
+                        : changed ? C.ac
+                        : isFirst ? C.acb : C.ts;
+                      var bg = isHeader ? C.acs
+                        : isManualEdited ? (isFirst ? "rgba(74,222,128,0.15)" : "rgba(74,222,128,0.07)")
+                        : changed ? (isFirst ? "rgba(249,115,22,0.22)" : "rgba(249,115,22,0.10)")
+                        : isFirst ? C.acs : C.sfh;
+                      var bleft = isFirst ? "2px solid " + (isManualEdited ? "#4ade80" : C.ac) : "none";
+                      var btop  = (changed || isManualEdited) && !isHeader ? "1px solid " + (isManualEdited ? "rgba(74,222,128,0.3)" : "rgba(249,115,22,0.3)") : "none";
+                      var bbot  = btop;
+
+                      // Inline input when this cell is active
+                      if (isActive) {
+                        return (
+                          <td key={ci} style={{ padding: "2px 4px", background: "rgba(74,222,128,0.12)", borderLeft: "2px solid #4ade80", border: "1px solid #4ade80", borderRadius: 3 }}>
+                            <input autoFocus defaultValue={displayVal}
+                              style={{ width: "100%", background: "transparent", border: "none", color: "#4ade80", fontSize: 12.5, padding: "4px 7px", outline: "none", fontFamily: "inherit" }}
+                              onBlur={function(e) {
+                                var v = e.target.value.trim();
+                                if (onEdit) onEdit(eKey, v || displayVal);
+                                if (setAC) setAC(null);
+                              }}
+                              onKeyDown={function(e) {
+                                if (e.key === "Enter")  { e.target.blur(); }
+                                if (e.key === "Escape") { if (setAC) setAC(null); }
+                              }}
+                            />
+                          </td>
+                        );
+                      }
+
                       return (
-                        <td key={ci} style={{
-                          padding: "6px 11px", fontSize: 12.5,
-                          fontWeight: isFirst || isHeader ? 500 : 400,
-                          color: isHeader ? C.acb : (changed ? C.ac : (isFirst ? C.acb : C.ts)),
-                          background: isHeader ? C.acs : (changed ? (isFirst ? "rgba(249,115,22,0.22)" : "rgba(249,115,22,0.10)") : (isFirst ? C.acs : C.sfh)),
-                          borderLeft: isFirst ? "2px solid " + C.ac : "none",
-                          borderTop: changed && !isHeader ? "1px solid rgba(249,115,22,0.3)" : "none",
-                          borderBottom: changed && !isHeader ? "1px solid rgba(249,115,22,0.3)" : "none",
-                        }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />
+                        <td key={ci}
+                          onClick={isEM && isValCell ? function(ek, dv) { return function() { if (setAC) setAC({ key: ek, origValue: dv }); }; }(eKey, displayVal) : undefined}
+                          title={isEM && isValCell ? "Clique para editar" : undefined}
+                          style={{
+                            padding: "6px 11px", fontSize: 12.5,
+                            fontWeight: isFirst || isHeader ? 500 : 400,
+                            color: clr, background: bg,
+                            borderLeft: bleft, borderTop: btop, borderBottom: bbot,
+                            cursor: isEM && isValCell ? "text" : "default",
+                            transition: "background 0.1s",
+                          }}
+                          dangerouslySetInnerHTML={{ __html: displayVal.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }}
+                        />
                       );
                     })}
                   </tr>
@@ -883,6 +938,11 @@ function App() {
   // Telemetry
   var _telem = useState(null); var telemetry = _telem[0]; var setTelemetry = _telem[1];
   var _telemParsing = useState(false); var telemParsing = _telemParsing[0]; var setTelemParsing = _telemParsing[1];
+  // Manual setup edits: { "msgIdx:tTblIdx:ri": newValue }
+  var _editMode = useState(false); var editMode = _editMode[0]; var setEditMode = _editMode[1];
+  var _manualEdits = useState({}); var manualEdits = _manualEdits[0]; var setManualEdits = _manualEdits[1];
+  var _activeCell = useState(null); var activeCell = _activeCell[0]; var setActiveCell = _activeCell[1];
+  // activeCell: { key: string, origValue: string } | null
   // Track maps cache (in-memory + localStorage)
   var _tmaps = useState(function() {
     try {
@@ -1101,6 +1161,7 @@ function App() {
       messages: messages.slice(),
       ts: new Date().toISOString(),
       notes: "",
+      manualEdits: Object.assign({}, manualEdits),
     };
     var n = [s].concat(savedSetups);
     setSavedSetups(n);
@@ -1201,7 +1262,8 @@ function App() {
     setGame(s.gameKey || ""); setCategory(s.categoryKey || "");
     setSelectedCars(s.cars || []); setTrack(s.track || ""); setCondition(s.condition || "Dry");
     setSessionType(s.sessionType || "race"); setRaceLaps(s.raceLaps || "");
-    setMessages(s.messages || []); setStep("chat"); setSelectedSetup(null);
+    setMessages(s.messages || []); setManualEdits(s.manualEdits || {}); setEditMode(false);
+    setStep("chat"); setSelectedSetup(null);
   }
 
   var cg = GAMES[game] || null;
@@ -1467,7 +1529,7 @@ function App() {
 
   function startSession() {
     var g = GAMES[game];
-    setStep("chat"); setMessages([]);
+    setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
       sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + g.name + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : ""));
@@ -2161,7 +2223,7 @@ function App() {
                     <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
                       {u
                         ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
-                        : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAst)}</div>
+                        : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAst, { msgIdx: i, edits: selectedSetup.manualEdits || {} })}</div>
                       }
                     </div>
                   );
@@ -2403,6 +2465,18 @@ function App() {
               {condition && track ? <span style={{ color: condition === "Wet" ? "#60a5fa" : C.warn }}> › {condition}</span> : ""}
               {sessionType && track ? <span style={{ color: C.td }}> › {sessionType === "qualifying" ? "QUALI" : "RACE" + (raceLaps ? " " + raceLaps + "L" : "")}</span> : ""}
             </div>
+            {messages.length >= 2 && (
+              <button onClick={function() { setEditMode(function(p) { var next = !p; if (!next) setActiveCell(null); return next; }); }}
+                style={{ padding: "4px 12px", background: editMode ? "rgba(74,222,128,0.12)" : "transparent", border: "1px solid " + (editMode ? "#4ade80" : C.bd), borderRadius: 3, color: editMode ? "#4ade80" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, cursor: "pointer", flexShrink: 0, fontWeight: editMode ? 700 : 400 }}>
+                {editMode ? "✓ EDITANDO" : "EDITAR SETUP"}
+              </button>
+            )}
+            {editMode && Object.keys(manualEdits).length > 0 && (
+              <button onClick={function() { setManualEdits({}); setActiveCell(null); setToast("Edições removidas"); }}
+                style={{ padding: "4px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>
+                LIMPAR
+              </button>
+            )}
           </div>
 
           {/* Messages */}
@@ -2413,6 +2487,13 @@ function App() {
                 <div style={{ fontSize: 14, color: C.td, marginBottom: 10 }}>No active engineer session</div>
                 <div style={{ fontSize: 13, color: C.td, marginBottom: 24 }}>Configure your car, track, and session type, then generate a setup</div>
                 <button onClick={function() { setStep("config"); }} style={{ padding: "9px 22px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, cursor: "pointer" }}>GO TO CONFIGURE</button>
+              </div>
+            )}
+            {editMode && (
+              <div style={{ padding: "8px 14px", marginBottom: 12, background: "rgba(74,222,128,0.07)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 4, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ color: "#4ade80", fontSize: 11, letterSpacing: 0.5 }}>✎</span>
+                <span style={{ fontSize: 12, color: "#4ade80" }}>Modo edição ativo — clique em qualquer valor para alterar</span>
+                {Object.keys(manualEdits).length > 0 && <span style={{ fontSize: 11, color: "#4ade80", marginLeft: "auto", opacity: 0.7 }}>{Object.keys(manualEdits).length} alteraç{Object.keys(manualEdits).length === 1 ? "ão" : "ões"}</span>}
               </div>
             )}
             {messages.map(function(m, i) {
@@ -2428,7 +2509,14 @@ function App() {
                 <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
                   {u
                     ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
-                    : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAssistant)}</div>
+                    : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAssistant, {
+                        msgIdx: i,
+                        edits: manualEdits,
+                        onEdit: function(key, val) { setManualEdits(function(p) { var n = Object.assign({}, p); n[key] = val; return n; }); },
+                        editMode: editMode,
+                        activeCell: activeCell,
+                        setActiveCell: setActiveCell,
+                      })}</div>
                   }
                 </div>
               );
