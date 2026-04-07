@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PIT WALL — Sim Racing Setup Engineer</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0b'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23f97316' stroke-width='2.5'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-weight='900' font-size='13' fill='%23f97316' text-anchor='middle' letter-spacing='0.5'%3EPW%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -506,6 +507,9 @@ function App() {
   });
   var customMaps = _cmaps[0]; var setCustomMaps = _cmaps[1];
   var _uploading = useState(null); var uploadingTrack = _uploading[0]; var setUploadingTrack = _uploading[1];
+  // Telemetry
+  var _telem = useState(null); var telemetry = _telem[0]; var setTelemetry = _telem[1];
+  var _telemParsing = useState(false); var telemParsing = _telemParsing[0]; var setTelemParsing = _telemParsing[1];
   // Track maps cache (in-memory + localStorage)
   var _tmaps = useState(function() {
     try {
@@ -814,6 +818,198 @@ function App() {
   function selAll() { setSelectedCars(selectedCars.length === allCars.length ? [] : allCars.slice()); }
   var canGo = game && category && selectedCars.length > 0 && track && condition;
 
+  // ── TELEMETRY PARSER ────────────────────────────────────────────────────────
+  function parseTelemetryFile(file) {
+    if (!file) return;
+    var ext = file.name.split(".").pop().toLowerCase();
+    if (!["csv", "txt", "log"].includes(ext)) {
+      setToast("Formato não suportado. Use CSV exportado pelo MoTeC, SRT, Pi Toolbox ou logs do jogo.");
+      return;
+    }
+    setTelemParsing(true);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var raw = e.target.result;
+        var lines = raw.split(/\r?\n/).filter(function(l) { return l.trim(); });
+        if (lines.length < 3) { setToast("Arquivo vazio ou inválido."); setTelemParsing(false); return; }
+
+        // Detect separator
+        var sep = lines[0].includes("\t") ? "\t" : ",";
+
+        // Find header row (first row with multiple columns)
+        var headerIdx = 0;
+        for (var i = 0; i < Math.min(10, lines.length); i++) {
+          if (lines[i].split(sep).length > 3) { headerIdx = i; break; }
+        }
+
+        var headers = lines[headerIdx].split(sep).map(function(h) { return h.trim().replace(/"/g, "").toLowerCase(); });
+        var dataRows = [];
+        for (var di = headerIdx + 1; di < lines.length; di++) {
+          var cols = lines[di].split(sep).map(function(c) { return c.trim().replace(/"/g, ""); });
+          if (cols.length < 2) continue;
+          var row = {};
+          headers.forEach(function(h, hi) { row[h] = cols[hi] || ""; });
+          dataRows.push(row);
+        }
+
+        // Channel aliases — cover MoTeC, SRT, Pi Toolbox, iRacing exports
+        function findCol(aliases) {
+          for (var ai = 0; ai < aliases.length; ai++) {
+            var a = aliases[ai].toLowerCase();
+            for (var hi2 = 0; hi2 < headers.length; hi2++) {
+              if (headers[hi2].includes(a)) return headers[hi2];
+            }
+          }
+          return null;
+        }
+
+        var colSpeed   = findCol(["speed","velocidade","vel","v (km","v (mph","groundspeed"]);
+        var colThrottle= findCol(["throttle","acelerador","tps","acc_pedal","throttle_pos"]);
+        var colBrake   = findCol(["brake","freio","bps","brake_pedal","brake_press","brake_pos"]);
+        var colGear    = findCol(["gear","marcha","current_gear"]);
+        var colLap     = findCol(["lap","volta","lapnumber","lap_number","lap number"]);
+        var colLapTime = findCol(["laptime","lap_time","lap time","last lap","lastlap","tiempo"]);
+        var colRPM     = findCol(["rpm","engine_rpm","motor"]);
+        var colLat     = findCol(["lat_g","lat g","lateral_g","latg","ay","lateral acc"]);
+        var colLon     = findCol(["lon_g","lon g","longi","longitudinal_g","ax","long acc","long_acc"]);
+        var colFuel    = findCol(["fuel","gasolina","fuel_level","fuel level","fuelremain"]);
+        var colTyreFL  = findCol(["tyre_temp_fl","tyretemp_fl","tyre temp fl","fl_tyre","lf_temp","lftiretemp"]);
+        var colTyreFR  = findCol(["tyre_temp_fr","tyretemp_fr","tyre temp fr","fr_tyre","rf_temp","rftiretemp"]);
+        var colTyreRL  = findCol(["tyre_temp_rl","tyretemp_rl","tyre temp rl","rl_tyre","lr_temp","lrtiretemp"]);
+        var colTyreRR  = findCol(["tyre_temp_rr","tyretemp_rr","tyre temp rr","rr_tyre","rr_temp","rrtiretemp"]);
+
+        function numVal(row, col) {
+          if (!col || !row[col]) return NaN;
+          return parseFloat(row[col].replace(",", "."));
+        }
+
+        // Aggregate per lap
+        var lapMap = {};
+        dataRows.forEach(function(row) {
+          var lap = colLap ? (parseInt(row[colLap]) || 0) : 0;
+          if (!lapMap[lap]) lapMap[lap] = { speeds:[], throttles:[], brakes:[], rpms:[], latGs:[], lonGs:[], fuelVals:[], tyreFL:[], tyreFR:[], tyreRL:[], tyreRR:[], lapTimes:[] };
+          var d = lapMap[lap];
+          var spd = numVal(row, colSpeed); if (!isNaN(spd)) d.speeds.push(spd);
+          var thr = numVal(row, colThrottle); if (!isNaN(thr)) d.throttles.push(thr);
+          var brk = numVal(row, colBrake); if (!isNaN(brk)) d.brakes.push(brk);
+          var rpm = numVal(row, colRPM); if (!isNaN(rpm)) d.rpms.push(rpm);
+          var lg  = numVal(row, colLat); if (!isNaN(lg)) d.latGs.push(Math.abs(lg));
+          var lng = numVal(row, colLon); if (!isNaN(lng)) d.lonGs.push(lng);
+          var fu  = numVal(row, colFuel); if (!isNaN(fu)) d.fuelVals.push(fu);
+          var lt  = numVal(row, colLapTime); if (!isNaN(lt)) d.lapTimes.push(lt);
+          var tfl = numVal(row, colTyreFL); if (!isNaN(tfl)) d.tyreFL.push(tfl);
+          var tfr = numVal(row, colTyreFR); if (!isNaN(tfr)) d.tyreFR.push(tfr);
+          var trl = numVal(row, colTyreRL); if (!isNaN(trl)) d.tyreRL.push(trl);
+          var trr = numVal(row, colTyreRR); if (!isNaN(trr)) d.tyreRR.push(trr);
+        });
+
+        function avg(arr) { return arr.length ? (arr.reduce(function(a,b){return a+b;},0)/arr.length) : NaN; }
+        function max(arr) { return arr.length ? Math.max.apply(null, arr) : NaN; }
+        function min(arr) { return arr.length ? Math.min.apply(null, arr) : NaN; }
+        function fmt(v, dec) { return isNaN(v) ? null : v.toFixed(dec !== undefined ? dec : 1); }
+
+        var lapNums = Object.keys(lapMap).map(Number).filter(function(l) { return l > 0; }).sort(function(a,b){return a-b;});
+        var lapSummaries = lapNums.map(function(lap) {
+          var d = lapMap[lap];
+          var lt = d.lapTimes.length ? d.lapTimes[d.lapTimes.length - 1] : NaN;
+          return {
+            lap: lap,
+            lapTime: fmt(lt, 3),
+            maxSpeed: fmt(max(d.speeds)),
+            avgSpeed: fmt(avg(d.speeds)),
+            avgThrottle: fmt(avg(d.throttles)),
+            avgBrake: fmt(avg(d.brakes)),
+            maxBrake: fmt(max(d.brakes)),
+            avgRPM: fmt(avg(d.rpms), 0),
+            maxLatG: fmt(max(d.latGs), 2),
+            minLonG: fmt(min(d.lonGs), 2),
+            fuelStart: fmt(d.fuelVals.length ? d.fuelVals[0] : NaN),
+            fuelEnd: fmt(d.fuelVals.length ? d.fuelVals[d.fuelVals.length-1] : NaN),
+            avgTyreFL: fmt(avg(d.tyreFL)), avgTyreFR: fmt(avg(d.tyreFR)),
+            avgTyreRL: fmt(avg(d.tyreRL)), avgTyreRR: fmt(avg(d.tyreRR)),
+          };
+        });
+
+        // Overall stats
+        var allSpeeds = [].concat.apply([], lapNums.map(function(l){return lapMap[l].speeds;}));
+        var allThrottles = [].concat.apply([], lapNums.map(function(l){return lapMap[l].throttles;}));
+        var allBrakes = [].concat.apply([], lapNums.map(function(l){return lapMap[l].brakes;}));
+        var allLatGs = [].concat.apply([], lapNums.map(function(l){return lapMap[l].latGs;}));
+
+        var allLapTimes = lapSummaries.map(function(l){return parseFloat(l.lapTime);}).filter(function(v){return !isNaN(v);});
+        var bestLap = allLapTimes.length ? Math.min.apply(null, allLapTimes) : null;
+        var worstLap = allLapTimes.length ? Math.max.apply(null, allLapTimes) : null;
+
+        // Channels available
+        var channelsFound = [];
+        if (colSpeed) channelsFound.push("Speed");
+        if (colThrottle) channelsFound.push("Throttle");
+        if (colBrake) channelsFound.push("Brake");
+        if (colGear) channelsFound.push("Gear");
+        if (colRPM) channelsFound.push("RPM");
+        if (colLat) channelsFound.push("Lateral G");
+        if (colLon) channelsFound.push("Longitudinal G");
+        if (colFuel) channelsFound.push("Fuel");
+        if (colTyreFL || colTyreFR || colTyreRL || colTyreRR) channelsFound.push("Tyre Temps");
+
+        setTelemetry({
+          fileName: file.name,
+          rows: dataRows.length,
+          laps: lapNums.length,
+          channelsFound: channelsFound,
+          overall: {
+            bestLapTime: bestLap ? fmt(bestLap, 3) : null,
+            worstLapTime: worstLap ? fmt(worstLap, 3) : null,
+            maxSpeed: fmt(max(allSpeeds)),
+            avgThrottle: fmt(avg(allThrottles)),
+            avgBrake: fmt(avg(allBrakes)),
+            maxLatG: fmt(max(allLatGs), 2),
+          },
+          laps: lapSummaries,
+          raw_headers: headers.slice(0, 40),
+        });
+        setToast("Telemetria carregada: " + lapSummaries.length + " voltas, " + channelsFound.length + " canais");
+      } catch(err) {
+        setToast("Erro ao processar telemetria: " + err.message);
+      }
+      setTelemParsing(false);
+    };
+    reader.onerror = function() { setToast("Erro ao ler arquivo."); setTelemParsing(false); };
+    reader.readAsText(file);
+  }
+
+  function buildTelemetryContext() {
+    if (!telemetry) return "";
+    var t = telemetry;
+    var lines = [
+      "\n\n--- TELEMETRY DATA ---",
+      "File: " + t.fileName + " | " + (t.rows||0) + " data points | Channels: " + (t.channelsFound||[]).join(", "),
+    ];
+    if (t.overall) {
+      var o = t.overall;
+      if (o.bestLapTime) lines.push("Best Lap: " + o.bestLapTime + "s | Worst: " + o.worstLapTime + "s");
+      if (o.maxSpeed) lines.push("Max Speed: " + o.maxSpeed + " | Avg Throttle: " + (o.avgThrottle||"n/a") + "% | Avg Brake: " + (o.avgBrake||"n/a") + "%");
+      if (o.maxLatG) lines.push("Max Lateral G: " + o.maxLatG + "G");
+    }
+    if (t.laps && t.laps.length > 0) {
+      lines.push("\nLap-by-lap summary:");
+      t.laps.forEach(function(l) {
+        var parts = ["Lap " + l.lap];
+        if (l.lapTime) parts.push("Time=" + l.lapTime + "s");
+        if (l.maxSpeed) parts.push("MaxSpd=" + l.maxSpeed);
+        if (l.avgThrottle) parts.push("Thr=" + l.avgThrottle + "%");
+        if (l.avgBrake) parts.push("Brk=" + l.avgBrake + "%");
+        if (l.maxLatG) parts.push("LatG=" + l.maxLatG);
+        if (l.avgTyreFL) parts.push("TyreFL=" + l.avgTyreFL + "° FR=" + l.avgTyreFR + "° RL=" + l.avgTyreRL + "° RR=" + l.avgTyreRR + "°");
+        lines.push("  " + parts.join(" | "));
+      });
+      lines.push("Use this data to give precise, data-driven setup recommendations. Reference specific lap numbers and channel values when explaining issues.");
+      lines.push("--- END TELEMETRY ---");
+    }
+    return lines.join("\n");
+  }
+
   function buildSystemPrompt() {
     var g = GAMES[game]; var cat = g.categories[category];
     var sessionPart = sessionType === "qualifying"
@@ -822,7 +1018,9 @@ function App() {
     var stratPart = (sessionType === "race" && Number(raceLaps) > 0)
       ? " Additionally, provide a recommended pit stop strategy for " + raceLaps + " laps: number of stops, ideal stop windows (lap numbers), tyre compound choices per stint, and any fuel-saving considerations."
       : "";
-    return 'You are an elite sim racing engineer for "' + g.name + '". RULES: 1) Match EXACTLY the adjustable parameters in "' + g.name + '". 2) Use exact naming, units, value ranges. 3) Same grouping order as the game UI. 4) Separate setup per car. 5) Be precise and technical.' + sessionPart + stratPart + ' SESSION: ' + g.name + ' | ' + cat.name + ' | Cars: ' + selectedCars.join(", ") + ' | Track: ' + track + ' | ' + condition + '. FOR INITIAL REQUEST: provide a complete baseline with ALL parameters. FOR FOLLOW-UP FEEDBACK: 1) Acknowledge the issue 2) Explain root cause 3) State precise parameter changes with exact values 4) Explain trade-offs 5) List priority order 6) Note interactions with other parameters. FORMAT: per-car headers, group by Tyres/Alignment/Suspension/Aero/Gearing/Brakes/Electronics. Use markdown tables for parameter values.';
+    var telemCtx = buildTelemetryContext();
+    var telemNote = telemCtx ? " TELEMETRY IS AVAILABLE — use it to ground every recommendation in actual data. Reference specific lap numbers, channel values, and trends." : "";
+    return 'You are an elite sim racing engineer for "' + g.name + '". RULES: 1) Match EXACTLY the adjustable parameters in "' + g.name + '". 2) Use exact naming, units, value ranges. 3) Same grouping order as the game UI. 4) Separate setup per car. 5) Be precise and technical.' + sessionPart + stratPart + telemNote + ' SESSION: ' + g.name + ' | ' + cat.name + ' | Cars: ' + selectedCars.join(", ") + ' | Track: ' + track + ' | ' + condition + '. FOR INITIAL REQUEST: provide a complete baseline with ALL parameters. FOR FOLLOW-UP FEEDBACK: 1) Acknowledge the issue 2) Explain root cause 3) State precise parameter changes with exact values 4) Explain trade-offs 5) List priority order 6) Note interactions with other parameters. FORMAT: per-car headers, group by Tyres/Alignment/Suspension/Aero/Gearing/Brakes/Electronics. Use markdown tables for parameter values.' + telemCtx;
   }
 
   function sendMsg(msg) {
@@ -1670,6 +1868,60 @@ function App() {
                 </div>
               );
             })()}
+
+            {/* Telemetry */}
+            <div style={{ borderBottom: "1px solid " + C.bd }}>
+              <div style={{ padding: "8px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>
+                  TELEMETRY{telemetry ? <span style={{ color: C.ok, marginLeft: 5 }}>● LOADED</span> : ""}
+                </span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <label style={{ padding: "2px 7px", background: telemetry ? C.acg : "transparent", border: "1px solid " + (telemetry ? C.ac : C.bd), borderRadius: 2, color: telemetry ? C.ac : C.tm, fontSize: 7, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, cursor: "pointer", fontWeight: 700 }}>
+                    {telemParsing ? "..." : (telemetry ? "↑ REPLACE" : "↑ IMPORT")}
+                    <input type="file" accept=".csv,.txt,.log" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) parseTelemetryFile(e.target.files[0]); e.target.value = ""; }} />
+                  </label>
+                  {telemetry && <button onClick={function() { setTelemetry(null); }} title="Remover telemetria" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: "2px 4px" }}>✕</button>}
+                </div>
+              </div>
+              {telemParsing && <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, color: C.td, fontSize: 9 }}><Loader /><span>PROCESSANDO...</span></div>}
+              {telemetry && !telemParsing && (
+                <div style={{ padding: "0 10px 10px" }}>
+                  <div style={{ background: C.sfh, borderRadius: 3, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 10, color: C.ts, marginBottom: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{telemetry.fileName}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 8px" }}>
+                      {[
+                        ["Voltas", telemetry.laps && telemetry.laps.length],
+                        ["Pontos", telemetry.rows],
+                        ["Melhor volta", telemetry.overall && telemetry.overall.bestLapTime ? telemetry.overall.bestLapTime + "s" : null],
+                        ["Vel. máx.", telemetry.overall && telemetry.overall.maxSpeed ? telemetry.overall.maxSpeed : null],
+                        ["Acelerador", telemetry.overall && telemetry.overall.avgThrottle ? telemetry.overall.avgThrottle + "%" : null],
+                        ["Freio médio", telemetry.overall && telemetry.overall.avgBrake ? telemetry.overall.avgBrake + "%" : null],
+                      ].filter(function(r) { return r[1] != null; }).map(function(r, ri) {
+                        return (
+                          <div key={ri}>
+                            <div style={{ fontSize: 8, color: C.td, letterSpacing: 0.5 }}>{r[0]}</div>
+                            <div style={{ fontSize: 11, color: C.ts, fontWeight: 500 }}>{r[1]}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {telemetry.channelsFound && telemetry.channelsFound.length > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 8, color: C.td, lineHeight: 1.6 }}>
+                        Canais: <span style={{ color: C.tm }}>{telemetry.channelsFound.join(" · ")}</span>
+                      </div>
+                    )}
+                    <button onClick={function() { sendMsg("Analyze my telemetry data and identify the top 3 setup changes that would improve my lap time. Reference specific channels and lap numbers."); }} disabled={messages.length < 1 || loading} style={{ marginTop: 8, width: "100%", padding: "5px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>
+                      ANALISAR COM ENGENHEIRO
+                    </button>
+                  </div>
+                </div>
+              )}
+              {!telemetry && !telemParsing && (
+                <div style={{ padding: "6px 16px 10px", color: C.td, fontSize: 10, lineHeight: 1.6 }}>
+                  Importe CSV do MoTeC, SRT, Pi Toolbox ou log do jogo. O engenheiro usará os dados para recomendações precisas.
+                </div>
+              )}
+            </div>
 
             {/* Actions */}
             <div style={{ padding: "10px 12px", borderBottom: "1px solid " + C.bd, display: "flex", flexDirection: "column", gap: 8 }}>
