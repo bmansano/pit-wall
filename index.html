@@ -679,11 +679,12 @@ function App() {
     setMessages(nm); setInput(""); setLoading(true);
     var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
     if (nm.length === 1) am[0].content = "[Driver]: " + msg;
-    window.sb.functions.invoke("anthropic-proxy", {
-      body: { model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am }
-    }).then(function(res) {
-      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
-      var d = res.data || {};
+    var payload = { model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am };
+    fetch(window.SB_URL + "/functions/v1/anthropic-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": window.SB_KEY },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); }).then(function(d) {
       if (d.error) throw new Error((typeof d.error === "object" ? d.error.message : d.error) || JSON.stringify(d.error));
       var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
       if (!txt) throw new Error("Resposta vazia. Confirme se o secret ANTHROPIC_API_KEY está configurado em Edge Functions → Secrets no Supabase.");
