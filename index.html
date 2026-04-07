@@ -27,6 +27,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -499,6 +500,12 @@ function App() {
   // Notes editing state
   var _editingNotes = useState(null); var editingNotesId = _editingNotes[0]; var setEditingNotesId = _editingNotes[1];
   var _notesText = useState(""); var notesText = _notesText[0]; var setNotesText = _notesText[1];
+  // Custom uploaded track maps: { trackName: dataUrl } — persisted separately, survives cache purge
+  var _cmaps = useState(function() {
+    try { var v = localStorage.getItem("pitwall_custom_maps"); return v ? JSON.parse(v) : {}; } catch(e) { return {}; }
+  });
+  var customMaps = _cmaps[0]; var setCustomMaps = _cmaps[1];
+  var _uploading = useState(null); var uploadingTrack = _uploading[0]; var setUploadingTrack = _uploading[1];
   // Track maps cache (in-memory + localStorage)
   var _tmaps = useState(function() {
     try {
@@ -715,6 +722,72 @@ function App() {
     if (selectedSetup && selectedSetup.id === id) setSelectedSetup(Object.assign({}, selectedSetup, { notes: notes }));
     setEditingNotesId(null);
     setToast("Notas salvas!");
+  }
+
+  function saveCustomMap(trackName, dataUrl) {
+    setCustomMaps(function(prev) {
+      var n = Object.assign({}, prev, {});
+      n[trackName] = dataUrl;
+      try { localStorage.setItem("pitwall_custom_maps", JSON.stringify(n)); } catch(e) {}
+      return n;
+    });
+  }
+
+  function removeCustomMap(trackName) {
+    setCustomMaps(function(prev) {
+      var n = Object.assign({}, prev);
+      delete n[trackName];
+      try { localStorage.setItem("pitwall_custom_maps", JSON.stringify(n)); } catch(e) {}
+      return n;
+    });
+  }
+
+  function handleMapUpload(trackName, file) {
+    if (!file || !trackName) return;
+    var ext = file.name.split(".").pop().toLowerCase();
+    setUploadingTrack(trackName);
+
+    if (ext === "pdf") {
+      // Use PDF.js to render first page → canvas → data URL
+      var pdfjsLib = window["pdfjs-dist/build/pdf"];
+      if (!pdfjsLib) { setToast("PDF.js não carregou. Tente PNG ou JPG."); setUploadingTrack(null); return; }
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        pdfjsLib.getDocument({ data: e.target.result }).promise.then(function(pdfDoc) {
+          return pdfDoc.getPage(1);
+        }).then(function(page) {
+          var viewport = page.getViewport({ scale: 2 });
+          var canvas = document.createElement("canvas");
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          var ctx = canvas.getContext("2d");
+          return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function() {
+            return canvas.toDataURL("image/png");
+          });
+        }).then(function(dataUrl) {
+          saveCustomMap(trackName, dataUrl);
+          setUploadingTrack(null);
+          setToast("Mapa carregado!");
+        }).catch(function() { setToast("Erro ao ler PDF."); setUploadingTrack(null); });
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // JPG / PNG — FileReader → data URL directly
+      var reader2 = new FileReader();
+      reader2.onload = function(e) {
+        saveCustomMap(trackName, e.target.result);
+        setUploadingTrack(null);
+        setToast("Mapa carregado!");
+      };
+      reader2.onerror = function() { setToast("Erro ao ler arquivo."); setUploadingTrack(null); };
+      reader2.readAsDataURL(file);
+    }
+  }
+
+  // Helper: returns best available map URL for a track (custom > wikimedia)
+  function getTrackMapUrl(gameKey, trackName) {
+    if (customMaps[trackName]) return customMaps[trackName];
+    return trackMaps[gameKey + "||" + trackName] || null;
   }
 
   function discardSession() {
@@ -1320,7 +1393,10 @@ function App() {
       }
       // Detail view
       var _mapKey2 = (selectedSetup.gameKey || "") + "||" + selectedSetup.track;
-      var _mapSvg = trackMaps[_mapKey2];
+      var _mapCustom = customMaps[selectedSetup.track];
+      var _mapWiki = trackMaps[_mapKey2];
+      var _mapSvg = _mapCustom || (_mapWiki !== "NOT_FOUND" ? _mapWiki : null) || (_mapWiki === "NOT_FOUND" ? "NOT_FOUND" : null);
+      var _isCustomMap = !!_mapCustom;
       var _mapLoading2 = trackMapLoading === _mapKey2;
       return (
         <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
@@ -1339,7 +1415,7 @@ function App() {
                   <div style={{ fontSize: 12, color: C.tm, marginBottom: 16 }}>Cars: <span style={{ color: C.ts }}>{selectedSetup.cars.join(", ")}</span></div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button onClick={function() { continueFromSetup(selectedSetup); }} style={{ padding: "7px 16px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>CONTINUE IN ENGINEER</button>
-                    <button onClick={function() { exportPdf(selectedSetup, trackMaps[(selectedSetup.gameKey || "") + "||" + selectedSetup.track]); }} style={{ padding: "7px 14px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>EXPORT PDF</button>
+                    <button onClick={function() { exportPdf(selectedSetup, getTrackMapUrl(selectedSetup.gameKey || "", selectedSetup.track)); }} style={{ padding: "7px 14px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>EXPORT PDF</button>
                     <button onClick={function() { exportTxt(selectedSetup); }} style={{ padding: "7px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT TXT</button>
                     <button onClick={function() { exportCsv(selectedSetup); }} style={{ padding: "7px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1 }}>EXPORT CSV</button>
                   </div>
@@ -1348,22 +1424,31 @@ function App() {
                 {/* Right: track map thumbnail */}
                 <div style={{ flexShrink: 0, width: 200 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>TRACK MAP</span>
-                    {_mapSvg && _mapSvg !== "NOT_FOUND" && (
-                      <button onClick={function() {
-                        setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[_mapKey2]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
-                        fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track);
-                      }} style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: 0 }}>↺</button>
-                    )}
-                    {!_mapSvg && !_mapLoading2 && (
-                      <button onClick={function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }} style={{ padding: "2px 8px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontSize: 8, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1 }}>LOAD</button>
-                    )}
+                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>
+                      TRACK MAP{_isCustomMap ? <span style={{ color: C.ac, marginLeft: 5 }}>✦ CUSTOM</span> : ""}
+                    </span>
+                    <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                      <label style={{ padding: "2px 8px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontSize: 8, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", fontWeight: 700 }}>
+                        {uploadingTrack === selectedSetup.track ? "..." : "↑ UPLOAD"}
+                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) handleMapUpload(selectedSetup.track, e.target.files[0]); e.target.value = ""; }} />
+                      </label>
+                      {_isCustomMap && <button onClick={function() { removeCustomMap(selectedSetup.track); }} title="Remover mapa customizado" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: 0 }}>✕</button>}
+                      {!_isCustomMap && _mapSvg && _mapSvg !== "NOT_FOUND" && (
+                        <button onClick={function() {
+                          setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[_mapKey2]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
+                          fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track);
+                        }} style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: 0 }}>↺</button>
+                      )}
+                      {!_isCustomMap && !_mapSvg && !_mapLoading2 && (
+                        <button onClick={function() { fetchTrackMap(selectedSetup.gameKey || "", selectedSetup.track); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 8, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1 }}>WEB</button>
+                      )}
+                    </div>
                   </div>
                   <div style={{ borderRadius: 4, overflow: "hidden", border: "1px solid " + C.bd, background: "#0a0a0b", height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {_mapLoading2 && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}><Loader /><span style={{ fontSize: 8, color: C.td, letterSpacing: 1 }}>LOADING</span></div>}
-                    {_mapSvg && _mapSvg !== "NOT_FOUND" && <img src={_mapSvg} alt={selectedSetup.track} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", filter: "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} />}
-                    {_mapSvg === "NOT_FOUND" && <span style={{ fontSize: 10, color: C.td }}>Not found</span>}
-                    {!_mapSvg && !_mapLoading2 && <span style={{ fontSize: 10, color: C.td }}>No map</span>}
+                    {(_mapLoading2 || uploadingTrack === selectedSetup.track) && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}><Loader /><span style={{ fontSize: 8, color: C.td, letterSpacing: 1 }}>{uploadingTrack === selectedSetup.track ? "PROCESSANDO" : "LOADING"}</span></div>}
+                    {!_mapLoading2 && uploadingTrack !== selectedSetup.track && _mapSvg && _mapSvg !== "NOT_FOUND" && <img src={_mapSvg} alt={selectedSetup.track} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", filter: _isCustomMap ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} />}
+                    {_mapSvg === "NOT_FOUND" && <span style={{ fontSize: 10, color: C.td }}>Não encontrado — use ↑ UPLOAD</span>}
+                    {!_mapSvg && !_mapLoading2 && uploadingTrack !== selectedSetup.track && <span style={{ fontSize: 10, color: C.td }}>Use ↑ UPLOAD ou WEB</span>}
                   </div>
                 </div>
               </div>
@@ -1515,27 +1600,41 @@ function App() {
 
             {/* Track Map */}
             {(game && track) && (function() {
-              var key = game + "||" + track;
-              var svg = trackMaps[key];
-              var loading2 = trackMapLoading === key;
+              var wikimediaKey = game + "||" + track;
+              var customUrl = customMaps[track];
+              var wikimediaUrl = trackMaps[wikimediaKey];
+              var displayUrl = customUrl || (wikimediaUrl !== "NOT_FOUND" ? wikimediaUrl : null);
+              var isCustom = !!customUrl;
+              var loading2 = trackMapLoading === wikimediaKey;
+              var isUploading = uploadingTrack === track;
               return (
                 <div style={{ borderBottom: "1px solid " + C.bd }}>
                   <div style={{ padding: "8px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>TRACK MAP</span>
-                    {!svg && !loading2 && (
-                      <button onClick={function() { fetchTrackMap(game, track); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 8, letterSpacing: 0.5 }}>GENERATE</button>
-                    )}
-                    {svg && (
-                      <button onClick={function() {
-                        setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[key]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
-                      }} style={{ padding: "2px 8px", background: "transparent", border: "none", borderRadius: 2, color: C.td, fontSize: 8 }}>↺</button>
-                    )}
+                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>
+                      TRACK MAP{isCustom ? <span style={{ color: C.ac, marginLeft: 5 }}>✦ CUSTOM</span> : ""}
+                    </span>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      {/* Upload button */}
+                      <label style={{ padding: "2px 7px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontSize: 7, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, cursor: "pointer", fontWeight: 700 }}>
+                        {isUploading ? "..." : "↑ UPLOAD"}
+                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) handleMapUpload(track, e.target.files[0]); e.target.value = ""; }} />
+                      </label>
+                      {/* Clear custom */}
+                      {isCustom && <button onClick={function() { removeCustomMap(track); }} title="Remover mapa customizado" style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 9, cursor: "pointer" }}>✕</button>}
+                      {/* Wikimedia fetch (only if no custom) */}
+                      {!isCustom && !wikimediaUrl && !loading2 && (
+                        <button onClick={function() { fetchTrackMap(game, track); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 7, letterSpacing: 0.5 }}>WEB</button>
+                      )}
+                      {!isCustom && wikimediaUrl && (
+                        <button onClick={function() { setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[wikimediaKey]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; }); }} style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 8, cursor: "pointer" }}>↺</button>
+                      )}
+                    </div>
                   </div>
                   <div style={{ padding: "0 10px 10px" }}>
-                    {loading2 && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>SEARCHING CIRCUIT</span></div>}
-                    {svg && svg !== "NOT_FOUND" && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={svg} alt={track} style={{ width: "100%", height: "auto", display: "block", filter: "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
-                    {svg === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Map not found on Wikimedia</div>}
-                    {!svg && !loading2 && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>No map loaded yet</div>}
+                    {(loading2 || isUploading) && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>{isUploading ? "PROCESSANDO" : "SEARCHING CIRCUIT"}</span></div>}
+                    {!loading2 && !isUploading && displayUrl && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={displayUrl} alt={track} style={{ width: "100%", height: "auto", display: "block", filter: isCustom ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
+                    {!loading2 && !isUploading && !displayUrl && wikimediaUrl === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Não encontrado. Use ↑ UPLOAD.</div>}
+                    {!loading2 && !isUploading && !displayUrl && wikimediaUrl !== "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Use ↑ UPLOAD ou WEB</div>}
                   </div>
                 </div>
               );
