@@ -164,6 +164,83 @@ const GAMES = {
   },
 };
 
+// ── TRACK → COUNTRY MAPPING ───────────────────────────────────────────────────
+var TRACK_COUNTRY_RULES = [
+  // Brazil
+  ["Interlagos","Brazil"],["São Paulo","Brazil"],["Goiânia","Brazil"],["Cascavel","Brazil"],
+  ["Curitiba","Brazil"],["Velopark","Brazil"],["Londrina","Brazil"],["Santa Cruz","Brazil"],
+  ["Salvador","Brazil"],["Curvelo","Brazil"],["Velocitt","Brazil"],["Jacarepaguá","Brazil"],
+  ["Tarumã","Brazil"],["Guaporé","Brazil"],
+  // Germany
+  ["Nürburgring","Germany"],["Hockenheim","Germany"],["Norisring","Germany"],
+  ["Sachsenring","Germany"],["Lausitzring","Germany"],["Oschersleben","Germany"],
+  ["Bilster Berg","Germany"],
+  // United Kingdom
+  ["Silverstone","United Kingdom"],["Brands Hatch","United Kingdom"],
+  ["Donington","United Kingdom"],["Snetterton","United Kingdom"],
+  ["Oulton Park","United Kingdom"],["Cadwell","United Kingdom"],
+  ["Knockhill","United Kingdom"],["Rockingham","United Kingdom"],
+  // Italy
+  ["Monza","Italy"],["Imola","Italy"],["Mugello","Italy"],["Misano","Italy"],
+  ["Vallelunga","Italy"],["Adria","Italy"],
+  // Belgium
+  ["Spa","Belgium"],["Zolder","Belgium"],
+  // France
+  ["Le Mans","France"],["Paul Ricard","France"],
+  // Spain
+  ["Barcelona","Spain"],["Jerez","Spain"],
+  // Netherlands
+  ["Zandvoort","Netherlands"],
+  // Austria
+  ["Spielberg","Austria"],["Red Bull Ring","Austria"],["Salzburgring","Austria"],
+  // Hungary
+  ["Hungaroring","Hungary"],
+  // Monaco
+  ["Monaco","Monaco"],["Azure","Monaco"],
+  // Portugal
+  ["Portimão","Portugal"],["Estoril","Portugal"],
+  // Japan
+  ["Suzuka","Japan"],["Fuji","Japan"],["Motegi","Japan"],["Okayama","Japan"],["Tsukuba","Japan"],
+  // Australia
+  ["Mount Panorama","Australia"],["Bathurst","Australia"],["Adelaide","Australia"],
+  ["Phillip Island","Australia"],["Sandown","Australia"],["Winton","Australia"],
+  // South Africa
+  ["Kyalami","South Africa"],
+  // Argentina
+  ["Buenos Aires","Argentina"],
+  // USA
+  ["Watkins Glen","USA"],["Long Beach","USA"],["Laguna Seca","USA"],
+  ["WeatherTech","USA"],["Daytona","USA"],["Sebring","USA"],["Road America","USA"],
+  ["Mid-Ohio","USA"],["Indianapolis","USA"],["Pocono","USA"],["Fontana","USA"],
+  ["Circuit of the Americas","USA"],["COTA","USA"],["St. Petersburg","USA"],
+  ["VIR","USA"],["Virginia","USA"],["Talladega","USA"],["Charlotte","USA"],
+  ["Martinsville","USA"],["Bristol","USA"],["Phoenix","USA"],["Kansas","USA"],
+  ["Michigan","USA"],["Texas","USA"],["Homestead","USA"],["Miami","USA"],
+  ["Darlington","USA"],["Richmond","USA"],["Nashville","USA"],["Iowa","USA"],
+  ["Las Vegas","USA"],["New Hampshire","USA"],["North Wilkesboro","USA"],
+  ["Chicago","USA"],["Barber","USA"],["South Boston","USA"],["Lanier","USA"],
+  ["Summit Point","USA"],["Lime Rock","USA"],["Road Atlanta","USA"],["Sonoma","USA"],
+  ["Detroit","USA"],["Mount Washington","USA"],["Crandon","USA"],["Eldora","USA"],
+  ["Williams Grove","USA"],["Knoxville","USA"],["Volusia","USA"],["Limaland","USA"],
+  ["Lucas Oil Speedway","USA"],["USA International","USA"],
+  // Canada
+  ["Mosport","Canada"],["Canadian Tire","Canada"],
+  // Middle East
+  ["Bahrain","Bahrain"],["Jeddah","Saudi Arabia"],["Lusail","Qatar"],["Dubai","UAE"],
+  // Asia
+  ["Sepang","Malaysia"],["Chang International","Thailand"],["Buriram","Thailand"],
+  ["Macau","China / Macau"],
+  // Fictional
+  ["RaceRoom Raceway","Fictional"],["Lakeview","Fictional"],
+];
+function getTrackCountry(name) {
+  var n = name.toLowerCase();
+  for (var i = 0; i < TRACK_COUNTRY_RULES.length; i++) {
+    if (n.includes(TRACK_COUNTRY_RULES[i][0].toLowerCase())) return TRACK_COUNTRY_RULES[i][1];
+  }
+  return "Other";
+}
+
 const CONDITIONS = ["Dry", "Wet", "Mixed / Drying", "Mixed / Wetting"];
 
 // Palette — readable contrast
@@ -1566,14 +1643,31 @@ function App() {
             <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
               {!game
                 ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center" }}>Select a simulator above</div>
-                : fTrks.map(function(t) {
-                    var sel = track === t;
-                    return (
-                      <button key={t} onClick={function() { setTrack(t); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px 8px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
-                        {t}
-                      </button>
-                    );
-                  })
+                : (function() {
+                    var grouped = {};
+                    var groupOrder = [];
+                    fTrks.forEach(function(t) {
+                      var country = getTrackCountry(t);
+                      if (!grouped[country]) { grouped[country] = []; groupOrder.push(country); }
+                      grouped[country].push(t);
+                    });
+                    groupOrder.sort();
+                    return groupOrder.map(function(country) {
+                      return (
+                        <div key={country}>
+                          <div style={{ padding: "10px 14px 3px", fontSize: 9, letterSpacing: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", textTransform: "uppercase", opacity: 0.7, borderBottom: "1px solid " + C.bd, marginBottom: 2 }}>{country}</div>
+                          {grouped[country].map(function(t) {
+                            var sel = track === t;
+                            return (
+                              <button key={t} onClick={function() { setTrack(t); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px 8px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    });
+                  })()
               }
             </div>
           </div>
