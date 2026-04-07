@@ -241,6 +241,302 @@ function getTrackCountry(name) {
   return "Other";
 }
 
+// ── GAME SETUP SCHEMAS ────────────────────────────────────────────────────────
+// Exact parameter names, units, and realistic value ranges per simulator.
+// Injected into the system prompt so Claude produces accurate, in-game values.
+var GAME_SETUP_PARAMS = {
+
+  ams2: `
+AUTOMOBILISTA 2 — SETUP SCHEMA
+Use the EXACT parameter names and tab structure below. Only suggest parameters available for the specific car (greyed-out params in the game UI are fixed — skip them).
+
+═══ TAB 1: TYRES / BRAKES / CHASSIS ═══
+
+[FRONT TYRES — FL & FR]
+• Tyre Compound: Automatic by Weather | Soft | Medium | Hard | Inter | Wet
+• Tyre Pressure: 1.15–1.65 bar (formula cars ~1.30–1.45 front, ~1.20–1.35 rear)
+
+[REAR TYRES — RL & RR]
+• Tyre Compound: (same as front)
+• Tyre Pressure: 1.10–1.60 bar
+
+[BRAKES]
+• Brake Pressure: 70–100% (default ~90%)
+• Brake Bias (F/R): expressed as e.g. "56.0 / 44.0" — front % / rear %
+  - Formula: 56/44 to 60/40 | GT: 54/46 to 58/42
+• Front Duct Opening: 0–100% (default 50%)
+• Rear Duct Opening: 0–100% (default 50%)
+
+[CHASSIS]
+• Front Downforce: 0–60 (formula cars: default ~42, range 30–55)
+• Rear Downforce: 0–60 (formula cars: default ~42, range 30–55)
+• Longitudinal Weight Bias: expressed as "F% / R%" e.g. "45.2 / 54.8"
+• Lateral Weight Bias: (if available — often fixed)
+• Weight Jacker: (if available — oval/asymmetric only)
+
+CRITICAL: Downforce values are wing steps 0–60, NOT degrees. Default ~42 for formula cars. Never suggest values like 8 or 12 — they produce near-zero downforce and make the car undriveable.
+
+═══ TAB 2: SUSPENSION ═══
+
+[FRONT LEFT / RIGHT — symmetric unless noted]
+• Caster Angle: 4.0–10.0 deg (formula ~7.0–8.5°)
+• Camber Angle: -4.5 to -0.5 deg (formula ~-3.0 to -3.8°)
+• Ride Height: 20–60 mm front (formula ~28–38 mm)
+• Spring Rate: steps 1–40 (formula ~10–16)
+• Bump Stop: 0–20 mm (formula ~1–5 mm)
+• Slow Bump: 1–40 (formula ~16–22)
+• Slow Rebound: 1–40 (formula ~22–30)
+• Fast Bump: 1–40 (formula ~14–20)
+• Fast Rebound: 1–40 (formula ~15–20)
+
+[FRONT CENTRE]
+• Steering Lock: 12.0–26.0 deg (formula ~18–22°)
+• Toe-In Angle: -0.5 to +0.3 deg (formula front ~-0.1 to -0.3° toe-out)
+• Anti-Roll Bar: 1–30 (formula ~12–18)
+• 3rd Spring: 1–30 (formula ~12–20)
+• Bump Stop: 0–20 mm
+• Slow Bump: 1–40
+• Slow Rebound: 1–40
+• Fast Bump: 1–40
+• Fast Rebound: 1–40
+
+[REAR LEFT / RIGHT — symmetric unless noted]
+• Camber Angle: -3.0 to -0.5 deg (formula ~-1.2 to -2.0°)
+• Ride Height: 50–130 mm rear (formula ~70–100 mm)
+• Spring Rate: 1–40 (formula ~10–16)
+• Bump Stop: 0–20 mm
+• Slow Bump: 1–40
+• Slow Rebound: 1–40
+• Fast Bump: 1–40
+• Fast Rebound: 1–40
+
+[REAR CENTRE]
+• Toe-In Angle: 0.0 to +0.5 deg (formula ~+0.1 to +0.3° toe-in for stability)
+• Anti-Roll Bar: 1–30 (formula ~12–18)
+• 3rd Spring: 1–30
+• Bump Stop: 0–20 mm
+• Slow Bump: 1–40
+• Slow Rebound: 1–40
+• Fast Bump: 1–40
+• Fast Rebound: 1–40
+
+[ACTIVE SUSPENSION — formula only if available]
+• Reaction Speed: 1–10
+• Damping: 1–10
+
+═══ TAB 3: DRIVETRAIN ═══
+
+[ENGINE / ELECTRONICS]
+• Fuel: 1–120 L (shown as "XXL (YY laps)" — calculate based on raceLaps × ~2.2–3.5 L/lap for formula)
+• Fuel Map: 0.80–1.20 (default 1.00)
+• Boost Pressure: 80–100% (if available)
+• Radiator Opening: 20–100% (default 80%)
+• Engine Braking: 1–8 (default ~2–4)
+• Traction Control: Off or 1–8 (formula often Off)
+• Anti-Lock Brakes: Off or 1–8 (formula often Off)
+• Automatic Gears: On/Off
+
+[GEAR RATIOS]
+• Final Drive: 3.0–6.5 (formula ~4.5–5.5)
+• 1st Gear through 8th Gear: 3-decimal ratios (e.g. 2.909, 2.154, 1.769...)
+  - Only include gears the car physically has
+
+[FRONT DIFFERENTIAL — if available]
+• Spool: On/Off
+• Clutch LSD: On/Off | Preload (Nm): 0–200 | Clutches: 1–6 | Power Ramp: 30–90 deg | Coast Ramp: 30–90 deg
+• Viscous LSD: Viscous Lock 0–100
+• Ratcheting: On/Off
+
+[REAR DIFFERENTIAL]
+• (same parameters as Front Differential)
+• Formula cars typically have: Clutch LSD On | Preload 50–150Nm | Clutches 4–6 | Power Ramp 50–80deg | Coast Ramp 30–55deg
+`,
+
+  iracing: `
+iRACING — SETUP SCHEMA
+Setup menus vary significantly by car class. Use these parameter names and realistic ranges.
+
+[TYRES]
+• Tyre Compound: (class-dependent — GT3: Dry/Wet | NASCAR: no choice | IndyCar: Alternate/Primary)
+• Tyre Pressure:
+  - Road cars: 24–32 psi (GT3 ~26–30 psi)
+  - Oval cars: 20–55 psi (varies by track banking)
+• Hot Tyre Pressure: target range for race temp
+• Tyre Temp (target): 85–105°C working range
+
+[AERO — road course]
+• Front Wing Angle / Downforce: car-dependent (GT3 uses "Front Flap" in mm ride height terms; open-wheel uses wing angle in deg 0–12)
+• Rear Wing Angle: (deg or mm; GT3 ~2–8°; LMP ~4–12°; formula 0–15°)
+• Splitter Height: mm
+• Brake Duct: 0–8 opening
+
+[SUSPENSION (road courses)]
+• Ride Height (Front/Rear): 2–6 inches or 50–150mm depending on car
+• Spring Rate (Front/Rear): lbs/in (150–2500) or N/mm (25–450)
+• Damper Bump/Rebound: steps 1–24
+• Anti-Roll Bar: steps 1–12 or diameter (mm)
+• Camber (Front): -4.0 to -0.5°
+• Camber (Rear): -2.5 to 0.0°
+• Toe (Front): -0.10 to +0.10 in or ±0.15°
+• Toe (Rear): 0.00 to +0.15 in or 0 to +0.20°
+• Caster: 5.0–12.0°
+
+[BRAKES]
+• Brake Pressure Bias: 48–64% front
+• Brake Disc (if applicable)
+
+[DRIVETRAIN]
+• Fuel Load: gal or L
+• Anti-roll settings, diff (car dependent)
+• Gear Ratios: ratio or mph-per-gear targets
+
+OVAL-SPECIFIC:
+• Wedge/Cross-weight: %
+• Track Bar Height (left/right): inches
+• Panhard Bar: inches
+• Sway Bar: diameter + arm length
+• Shocks: 1–12 compression/rebound
+• Tire Stagger: inches
+`,
+
+  acc_evo: `
+ASSETTO CORSA EVO — SETUP SCHEMA
+
+[TYRES]
+• Tyre Compound: Soft (S) / Medium (M) / Hard (H) / Wet (W) / Intermediate (I) / Hypersoft (HS) — car dependent
+• Tyre Pressure (Front/Rear): 21.0–33.0 PSI or 1.45–2.28 bar (GT3 ~27–29 psi cold)
+• Tyre Blanket: On/Off
+
+[ELECTRONICS]
+• TC (Traction Control): 0–12 or Off
+• TC2 (TC2 / Cut): 0–12 or Off
+• ABS: 0–12 or Off
+• Engine Map: 1–6 (power/fuel mode)
+• BB (Brake Bias): 46–62% front
+
+[AERO]
+• Front Wing: 0–10 (or car-specific steps) — GT cars: 0–10 steps; Formula: 0–15 deg
+• Rear Wing: 0–10 steps or deg
+• Splitter: 0–5 (if applicable)
+
+[SUSPENSION]
+• Ride Height (FR/RR): 50–120mm — must maintain legal min (GT3: 50mm front, 55mm rear)
+• Spring Rate (FR/RR): 80–400 N/mm
+• Damper Bump Slow (FR/RR): 1–20
+• Damper Bump Fast (FR/RR): 1–20
+• Damper Rebound Slow (FR/RR): 1–20
+• Damper Rebound Fast (FR/RR): 1–20
+• Anti-Roll Bar (Front/Rear): 1–10
+• Toe Front: -0.40 to +0.40 deg
+• Toe Rear: -0.20 to +0.40 deg
+• Camber Front: -4.0 to -1.0 deg
+• Camber Rear: -3.5 to -0.5 deg
+• Caster Front: 8.0–14.0 deg (fixed per car)
+• Wheel Rate / 3rd Spring: if applicable
+
+[BRAKES]
+• Brake Pad Compound: 1 (hard/endurance) to 4 (soft/quali)
+• Brake Disc Thickness: (min thickness for safety)
+
+[DRIVETRAIN]
+• Fuel: L (qualify: minimum; race: calculated)
+• Differential Preload: 20–200 Nm
+• Differential Power: 20–80%
+• Differential Coast: 10–60%
+`,
+
+  lmu: `
+LE MANS ULTIMATE — SETUP SCHEMA (rFactor 2 engine base)
+
+[TYRES]
+• Tyre Compound: Slick (S1/S2/S3) / Intermediate / Wet — WEC spec per class
+• Tyre Pressure (FLFRRLRR): 20.0–30.0 psi (Hypercar ~24–27 psi, GT3 ~26–29 psi)
+• Tyre Blanket Temp: 80°C
+
+[AERO]
+• Front Wing/Aero Package: 0–60 steps or specific LMH aero maps (Low/Medium/High downforce trim)
+• Rear Wing: 0–60 steps
+• Ride height determines diffuser downforce — critical for LMH cars
+• Splitter / Front Dive Planes: steps if available
+
+[SUSPENSION]
+• Front Ride Height: 20–80mm
+• Rear Ride Height: 40–120mm (rake angle drives diffuser effect)
+• Spring Rate FR/RR: N/mm — Hypercar 80–250 N/mm
+• 3rd Spring (Heave): N/mm
+• Damper Slow Bump FR/RR: 1–20
+• Damper Fast Bump FR/RR: 1–20
+• Damper Slow Rebound FR/RR: 1–20
+• Damper Fast Rebound FR/RR: 1–20
+• Anti-Roll Bar FR/RR: steps 1–16
+• Camber Front: -3.5 to -0.5 deg
+• Camber Rear: -2.0 to 0.0 deg
+• Toe Front: -0.2 to +0.1 deg
+• Toe Rear: 0.0 to +0.3 deg
+
+[BRAKES]
+• Brake Bias: 54–62% front
+• Brake Disc / Pad: compound selection per manufacturer
+• Brake Duct: 0–10
+
+[DRIVETRAIN]
+• Fuel Load: L (LMH consumes ~2.8–3.8 L/lap at Le Mans)
+• Fuel Mode / ERS Mode: 1–6
+• Differential settings: Preload Nm | Power ramp % | Coast ramp %
+• Gear Ratios: ratio per gear (7-speed typical for LMH)
+
+[HYBRID / ERS — Hypercar only]
+• ERS Deployment Mode: Qualifying/Race/Conservation
+• Harvest Level: 1–5
+`,
+
+  rrre: `
+RACEROOM RACING EXPERIENCE — SETUP SCHEMA
+
+[TYRES]
+• Tyre Compound: Dry (Soft/Medium/Hard) / Wet / Intermediate (class dependent)
+• Tyre Pressure: 1.40–2.20 bar (GT: ~1.80–2.00 bar; DTM: ~1.85–2.05 bar)
+
+[AERO]
+• Front Wing Level: 0–12 (GT3: 0–8; DTM: 0–10)
+• Rear Wing Level: 0–12
+• Front Splitter: 0–5 (if available)
+• Ride Height affects underbody aero
+
+[SUSPENSION]
+• Ride Height Front/Rear: 50–120mm
+• Spring Rate Front/Rear: steps 1–20 or kN/m
+• Bump Damping Front/Rear: 1–20
+• Rebound Damping Front/Rear: 1–20
+• Fast Bump Front/Rear: 1–20 (if available)
+• Anti-Roll Bar Front/Rear: steps 1–12
+• Camber Front: -4.0 to -0.5 deg
+• Camber Rear: -3.0 to 0.0 deg
+• Toe Front: -0.3 to +0.3 deg
+• Toe Rear: -0.1 to +0.4 deg
+• Caster: (often fixed per car)
+
+[BRAKES]
+• Brake Pressure: 80–100%
+• Brake Bias: 50–62% front
+• Brake Duct: 0–8 (if available)
+
+[DRIVETRAIN]
+• Fuel Load: L
+• Engine Map / Torque Map: 1–6
+• Traction Control: Off or 1–8
+• ABS: Off or 1–8
+• Differential Preload: Nm
+• Differential Power Lock: 10–80%
+• Differential Coast Lock: 10–60%
+• Gear Ratios: final drive + individual gear ratios
+`,
+};
+
+function getSetupSchema(gameKey) {
+  return GAME_SETUP_PARAMS[gameKey] || "";
+}
+
 const CONDITIONS = ["Dry", "Wet", "Mixed / Drying", "Mixed / Wetting"];
 
 // Palette — readable contrast
@@ -1113,15 +1409,40 @@ function App() {
 
   function buildSystemPrompt() {
     var g = GAMES[game]; var cat = g.categories[category];
+    var schema = getSetupSchema(game);
     var sessionPart = sessionType === "qualifying"
-      ? " This is a QUALIFYING setup — maximize single-lap peak performance. Prioritize grip, minimal drag for this circuit layout."
-      : " This is a RACE setup — balance performance with tyre life and fuel consumption across " + (raceLaps > 0 ? raceLaps + " laps" : "the full race distance") + ".";
+      ? "This is a QUALIFYING setup — maximize single-lap peak performance. Prioritize grip and minimal drag for this circuit layout."
+      : "This is a RACE setup — balance performance with tyre life and fuel consumption across " + (raceLaps > 0 ? raceLaps + " laps" : "the full race distance") + ".";
     var stratPart = (sessionType === "race" && Number(raceLaps) > 0)
-      ? " Additionally, provide a recommended pit stop strategy for " + raceLaps + " laps: number of stops, ideal stop windows (lap numbers), tyre compound choices per stint, and any fuel-saving considerations."
+      ? "\n\nPIT STRATEGY: Include a recommended pit stop strategy for " + raceLaps + " laps: number of stops, ideal stop windows (lap numbers), tyre compound choices per stint, and fuel-saving considerations."
       : "";
     var telemCtx = buildTelemetryContext();
-    var telemNote = telemCtx ? " TELEMETRY IS AVAILABLE — use it to ground every recommendation in actual data. Reference specific lap numbers, channel values, and trends." : "";
-    return 'You are an elite sim racing engineer for "' + g.name + '". RULES: 1) Match EXACTLY the adjustable parameters in "' + g.name + '". 2) Use exact naming, units, value ranges. 3) Same grouping order as the game UI. 4) Separate setup per car. 5) Be precise and technical.' + sessionPart + stratPart + telemNote + ' SESSION: ' + g.name + ' | ' + cat.name + ' | Cars: ' + selectedCars.join(", ") + ' | Track: ' + track + ' | ' + condition + '. FOR INITIAL REQUEST: provide a complete baseline with ALL parameters. FOR FOLLOW-UP FEEDBACK: 1) Acknowledge the issue 2) Explain root cause 3) State precise parameter changes with exact values 4) Explain trade-offs 5) List priority order 6) Note interactions with other parameters. FORMAT: per-car headers, group by Tyres/Alignment/Suspension/Aero/Gearing/Brakes/Electronics. Use markdown tables for parameter values.' + telemCtx;
+    var telemNote = telemCtx ? "\n\nTELEMETRY AVAILABLE — ground every recommendation in the actual data. Reference specific lap numbers, channel values, and trends when explaining changes." : "";
+
+    var schemaBlock = schema
+      ? "\n\n" + schema + "\nCRITICAL RULES:\n1. ONLY suggest parameters that exist in the schema above for this game.\n2. Use the EXACT parameter names listed — not paraphrases.\n3. Stay strictly within the stated value ranges. Never suggest values outside them.\n4. Skip parameters marked as greyed-out/unavailable in game for the chosen car category.\n5. For AMS2 Downforce: values are wing steps 0–60. Default formula baseline is ~42. NEVER suggest single-digit downforce values.\n"
+      : "";
+
+    return [
+      'You are an elite sim racing setup engineer with expert knowledge of "' + g.name + '".',
+      "",
+      "SESSION: " + g.name + " | " + cat.name + " | Cars: " + selectedCars.join(", ") + " | Track: " + track + " | Conditions: " + condition,
+      sessionPart,
+      stratPart,
+      schemaBlock,
+      telemNote,
+      "",
+      "OUTPUT FORMAT RULES:",
+      "1. Use the tab/group structure from the game UI as section headers (## Tab Name → ### Group Name).",
+      "2. Use markdown tables with columns: | Parameter | Value | for each parameter.",
+      "3. After EACH section/group table, add a '📘 Engineer Notes:' paragraph (2–4 sentences) explaining:",
+      "   - What the key parameters in that group do to car behaviour",
+      "   - How this baseline is tailored to this specific track and conditions",
+      "   - What symptoms to watch for and which parameters to adjust in response",
+      "   This replicates the in-game help text and helps the driver understand what to change.",
+      "4. For feedback/follow-up: Acknowledge the issue → explain root cause → state exact parameter changes → explain effect → list interaction warnings.",
+      "5. One setup per car if multiple cars selected.",
+    ].join("\n") + telemCtx;
   }
 
   function sendMsg(msg) {
@@ -1130,7 +1451,7 @@ function App() {
     setMessages(nm); setInput(""); setLoading(true);
     var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
     if (nm.length === 1) am[0].content = "[Driver]: " + msg;
-    var payload = { model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 8000 : 3000, system: buildSystemPrompt(), messages: am };
+    var payload = { model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 10000 : 4000, system: buildSystemPrompt(), messages: am };
     fetch(window.SB_URL + "/functions/v1/anthropic-proxy", {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": window.SB_KEY },
