@@ -896,8 +896,8 @@ function App() {
       doc.rect(ml, 3, 12, 12, "FD");
       doc.setTextColor.apply(doc, ac);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
-      doc.text("PW", ml + 6, 10.5, { align: "center" });
+      doc.setFontSize(9);
+      doc.text("PW", ml + 6, 10.8, { align: "center" });
       // PIT WALL text
       doc.setTextColor(220, 220, 226);
       doc.setFontSize(11);
@@ -1040,10 +1040,7 @@ function App() {
       // ── Section title ────────────────────────────────────────────────────
       if (sec.title) {
         checkY(12);
-        // Thin full-width separator line before title
-        doc.setDrawColor(30, 30, 36);
-        doc.line(ml, y, ml + cw, y);
-        y += 3;
+        y += 4;
         // Orange accent bar only on the title row
         doc.setFillColor.apply(doc, ac);
         doc.rect(ml, y, 3, 6.5, "F");
@@ -1051,7 +1048,7 @@ function App() {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
         doc.text(sec.title.replace(/\*\*/g, "").toUpperCase(), ml + 6, y + 5);
-        y += 10;
+        y += 9;
       }
 
       // ── Table ────────────────────────────────────────────────────────────
@@ -1087,11 +1084,7 @@ function App() {
           }
           doc.rect(ml, y, cw, rowH, "F");
 
-          // NO orange bar on data rows — only a subtle left border on header
-          if (isHeader) {
-            doc.setFillColor.apply(doc, ac);
-            doc.rect(ml, y, 2, rowH, "F");
-          }
+          // No orange bar on any table row (section title already has it)
 
           // Cell text
           row.forEach(function(cell, ci) {
