@@ -733,9 +733,9 @@ function App() {
   var cg = GAMES[game] || null;
   var cc = (cg && cg.categories) ? cg.categories[category] || null : null;
   var allCars = cc ? cc.cars : [];
-  var trks = cg ? cg.tracks : [];
+  var trks = cg ? cg.tracks.slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
   var fTrks = trks.filter(function(t) { return t.toLowerCase().includes(trackFilter.toLowerCase()); });
-  var fCars = allCars.filter(function(c) { return c.toLowerCase().includes(carFilter.toLowerCase()); });
+  var fCars = allCars.slice().sort(function(a, b) { return a.localeCompare(b); }).filter(function(c) { return c.toLowerCase().includes(carFilter.toLowerCase()); });
 
   function toggleCar(car) { setSelectedCars(function(p) { return p.includes(car) ? p.filter(function(c) { return c !== car; }) : p.concat([car]); }); }
   function selAll() { setSelectedCars(selectedCars.length === allCars.length ? [] : allCars.slice()); }
@@ -1186,7 +1186,7 @@ function App() {
             <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
               {!game
                 ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center", lineHeight: 1.6 }}>Select a simulator<br/>above</div>
-                : Object.entries(cg.categories).map(function(e2) {
+                : Object.entries(cg.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
                     var k = e2[0]; var cat = e2[1]; var sel = category === k;
                     return (
                       <button key={k} onClick={function() { setCategory(k); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "9px 12px 9px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
