@@ -1193,14 +1193,24 @@ function App() {
 
   function saveSetup() {
     if (messages.length < 2) return;
-    var g = GAMES[game];
+    // Fall back to activeSetupSrc for fields that may be empty when continuing a saved setup
+    var fb = activeSetupSrc || {};
+    var gKey = game || fb.gameKey || "";
+    var catKey = category || fb.categoryKey || "";
+    var trkVal = track || fb.track || "";
+    var condVal = condition || fb.condition || "Dry";
+    var g = GAMES[gKey];
     var s = {
       id: Date.now().toString(),
-      game: g ? g.name : game, gameKey: game,
-      category: (g && g.categories[category]) ? g.categories[category].name : category,
-      categoryKey: category,
-      cars: selectedCars.slice(), track, condition,
-      sessionType, raceLaps,
+      game: g ? g.name : (gKey || fb.game || ""),
+      gameKey: gKey,
+      category: (g && g.categories[catKey]) ? g.categories[catKey].name : (catKey || fb.category || ""),
+      categoryKey: catKey,
+      cars: selectedCars.length > 0 ? selectedCars.slice() : (fb.cars || []),
+      track: trkVal,
+      condition: condVal,
+      sessionType: sessionType || fb.sessionType || "race",
+      raceLaps: raceLaps || fb.raceLaps || "",
       messages: messages.slice(),
       ts: new Date().toISOString(),
       notes: "",
