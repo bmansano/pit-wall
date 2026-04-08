@@ -955,6 +955,8 @@ function App() {
   var _msgs = useState([]); var messages = _msgs[0]; var setMessages = _msgs[1];
   var _loading = useState(false); var loading = _loading[0]; var setLoading = _loading[1];
   var _input = useState(""); var input = _input[0]; var setInput = _input[1];
+  // Stores the source setup object when continuing from history — used as sidebar fallback labels
+  var _activeSrc = useState(null); var activeSetupSrc = _activeSrc[0]; var setActiveSetupSrc = _activeSrc[1];
   // UI state
   var _sidebar = useState(true); var sidebarOpen = _sidebar[0]; var setSidebarOpen = _sidebar[1];
   var _tf = useState(""); var trackFilter = _tf[0]; var setTrackFilter = _tf[1];
@@ -1010,10 +1012,12 @@ function App() {
   useEffect(function() {
     if (toast) { var t = setTimeout(function() { setToast(null); }, 2800); return function() { clearTimeout(t); }; }
   }, [toast]);
-  // Auto-fetch track map when engineer session starts
+  // Auto-fetch track map when engineer session starts (also handles fallback from activeSetupSrc)
   useEffect(function() {
-    if (game && track) fetchTrackMap(game, track);
-  }, [game, track]);
+    var g = game || (activeSetupSrc && activeSetupSrc.gameKey) || "";
+    var t = track || (activeSetupSrc && activeSetupSrc.track) || "";
+    if (g && t) fetchTrackMap(g, t);
+  }, [game, track, activeSetupSrc]);
 
   function loadSetups() {
     if (!window.sb || !user) return;
@@ -1293,16 +1297,40 @@ function App() {
 
   function discardSession() {
     setMessages([]); setGame(""); setCategory(""); setSelectedCars([]); setTrack(""); setCondition("Dry");
-    setSessionType("race"); setRaceLaps(""); setStep("config"); setConfirmDiscard(false);
+    setSessionType("race"); setRaceLaps(""); setStep("config"); setConfirmDiscard(false); setActiveSetupSrc(null);
   }
 
   // Restore a saved setup as active session so user can continue chatting
   function continueFromSetup(s) {
-    setGame(s.gameKey || ""); setCategory(s.categoryKey || "");
-    setSelectedCars(s.cars || []); setTrack(s.track || ""); setCondition(s.condition || "Dry");
-    setSessionType(s.sessionType || "race"); setRaceLaps(s.raceLaps || "");
-    setMessages(s.messages || []); setManualEdits(s.manualEdits || {}); setEditMode(false);
-    setStep("chat"); setSelectedSetup(null);
+    // Recover gameKey from game name if missing
+    var gKey = s.gameKey;
+    if (!gKey && s.game) {
+      Object.keys(GAMES).forEach(function(k) { if (GAMES[k].name === s.game) gKey = k; });
+    }
+    gKey = gKey || "";
+
+    // Recover categoryKey from category name if missing
+    var catKey = s.categoryKey;
+    if (!catKey && s.category && gKey && GAMES[gKey]) {
+      Object.keys(GAMES[gKey].categories || {}).forEach(function(k) {
+        if (GAMES[gKey].categories[k].name === s.category) catKey = k;
+      });
+    }
+    catKey = catKey || "";
+
+    setGame(gKey);
+    setCategory(catKey);
+    setSelectedCars(s.cars || []);
+    setTrack(s.track || "");
+    setCondition(s.condition || "Dry");
+    setSessionType(s.sessionType || "race");
+    setRaceLaps(s.raceLaps || "");
+    setMessages(s.messages || []);
+    setManualEdits(s.manualEdits || {});
+    setEditMode(false);
+    setActiveSetupSrc(s);   // keep the raw setup as fallback for sidebar labels
+    setStep("chat");
+    setSelectedSetup(null);
   }
 
   var cg = GAMES[game] || null;
@@ -1568,7 +1596,7 @@ function App() {
 
   function startSession() {
     var g = GAMES[game];
-    setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false);
+    setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
       sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + g.name + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : ""));
@@ -2395,14 +2423,22 @@ function App() {
                 <span>SESSION</span>
                 {isMobile && <button onClick={function() { setSidebarOpen(false); }} style={{ background: "none", border: "none", color: C.td, fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 }}>✕</button>}
               </div>
-              {[["Simulator", cg ? cg.name : "—"], ["Category", cc ? cc.name : "—"], ["Track", track || "—"], ["Conditions", condition], ["Session Type", sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : "")]].map(function(r) {
-                return (
-                  <div key={r[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: 13, marginBottom: 7 }}>
-                    <span style={{ color: C.td, flexShrink: 0 }}>{r[0]}</span>
-                    <span style={{ color: C.ts, fontWeight: 500, maxWidth: 148, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r[1]}</span>
-                  </div>
-                );
-              })}
+              {(function() {
+                var fb = activeSetupSrc || {};
+                var simName = cg ? cg.name : (fb.game || "—");
+                var catName = cc ? cc.name : (fb.category || "—");
+                var trkName = track || fb.track || "—";
+                var cond = condition || fb.condition || "—";
+                var sessLabel = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : "");
+                return [["Simulator", simName], ["Category", catName], ["Track", trkName], ["Conditions", cond], ["Session Type", sessLabel]].map(function(r) {
+                  return (
+                    <div key={r[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: 13, marginBottom: 7 }}>
+                      <span style={{ color: C.td, flexShrink: 0 }}>{r[0]}</span>
+                      <span style={{ color: C.ts, fontWeight: 500, maxWidth: 148, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r[1]}</span>
+                    </div>
+                  );
+                });
+              })()}
               {selectedCars.length > 0 && (
                 <div style={{ marginTop: 8, padding: "8px 10px", background: C.bg, borderRadius: 3, maxHeight: 90, overflowY: "auto" }}>
                   {selectedCars.map(function(c, i) { return <div key={i} style={{ fontSize: 12, color: C.ts, lineHeight: 2 }}><span style={{ color: C.ac, marginRight: 6 }}>›</span>{c}</div>; })}
@@ -2411,14 +2447,18 @@ function App() {
             </div>
 
             {/* Track Map */}
-            {(game && track) && (function() {
-              var wikimediaKey = game + "||" + track;
+            {((game || (activeSetupSrc && activeSetupSrc.gameKey)) && (track || (activeSetupSrc && activeSetupSrc.track))) && (function() {
+              var mapGame = game || (activeSetupSrc && activeSetupSrc.gameKey) || "";
+              var mapTrack = track || (activeSetupSrc && activeSetupSrc.track) || "";
+              var wikimediaKey = mapGame + "||" + mapTrack;
               var customUrl = customMaps[track];
+              var wikimediaUrl = trackMaps[wikimediaKey];
+              var customUrl = customMaps[mapTrack];
               var wikimediaUrl = trackMaps[wikimediaKey];
               var displayUrl = customUrl || (wikimediaUrl !== "NOT_FOUND" ? wikimediaUrl : null);
               var isCustom = !!customUrl;
               var loading2 = trackMapLoading === wikimediaKey;
-              var isUploading = uploadingTrack === track;
+              var isUploading = uploadingTrack === mapTrack;
               return (
                 <div style={{ borderBottom: "1px solid " + C.bd }}>
                   <div style={{ padding: "8px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -2429,13 +2469,13 @@ function App() {
                       {/* Upload button */}
                       <label style={{ padding: "2px 7px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontSize: 7, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, cursor: "pointer", fontWeight: 700 }}>
                         {isUploading ? "..." : "↑ UPLOAD"}
-                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) handleMapUpload(track, e.target.files[0]); e.target.value = ""; }} />
+                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) handleMapUpload(mapTrack, e.target.files[0]); e.target.value = ""; }} />
                       </label>
                       {/* Clear custom */}
-                      {isCustom && <button onClick={function() { removeCustomMap(track); }} title="Remover mapa customizado" style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 9, cursor: "pointer" }}>✕</button>}
+                      {isCustom && <button onClick={function() { removeCustomMap(mapTrack); }} title="Remover mapa customizado" style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 9, cursor: "pointer" }}>✕</button>}
                       {/* Wikimedia fetch (only if no custom) */}
                       {!isCustom && !wikimediaUrl && !loading2 && (
-                        <button onClick={function() { fetchTrackMap(game, track); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 7, letterSpacing: 0.5 }}>WEB</button>
+                        <button onClick={function() { fetchTrackMap(mapGame, mapTrack); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 7, letterSpacing: 0.5 }}>WEB</button>
                       )}
                       {!isCustom && wikimediaUrl && (
                         <button onClick={function() { setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[wikimediaKey]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; }); }} style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 8, cursor: "pointer" }}>↺</button>
@@ -2444,7 +2484,7 @@ function App() {
                   </div>
                   <div style={{ padding: "0 10px 10px" }}>
                     {(loading2 || isUploading) && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>{isUploading ? "PROCESSANDO" : "SEARCHING CIRCUIT"}</span></div>}
-                    {!loading2 && !isUploading && displayUrl && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={displayUrl} alt={track} style={{ width: "100%", height: "auto", display: "block", filter: isCustom ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
+                    {!loading2 && !isUploading && displayUrl && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={displayUrl} alt={mapTrack} style={{ width: "100%", height: "auto", display: "block", filter: isCustom ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
                     {!loading2 && !isUploading && !displayUrl && wikimediaUrl === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Não encontrado. Use ↑ UPLOAD.</div>}
                     {!loading2 && !isUploading && !displayUrl && wikimediaUrl !== "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Use ↑ UPLOAD ou WEB</div>}
                   </div>
