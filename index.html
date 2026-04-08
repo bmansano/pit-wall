@@ -13,7 +13,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body, #root { height: 100%; }
-  body { background: #0a0a0b; overflow: hidden; font-family: 'Chakra Petch', sans-serif; }
+  body { background: #0a0a0b; overflow: hidden; font-family: 'Chakra Petch', sans-serif; font-size: 15px; }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #252530; border-radius: 2px; }
@@ -25,6 +25,31 @@
   input::placeholder, textarea::placeholder { color: #3a3a44; }
   .toast-enter { animation: toastIn 0.2s ease; }
   @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    html, body, #root { height: auto; min-height: 100%; }
+    body { overflow-y: auto !important; overflow-x: hidden; }
+    .pw-desktop-only { display: none !important; }
+    .pw-mobile-only { display: flex !important; }
+    .pw-sim-bar { flex-wrap: wrap; height: auto !important; padding: 8px 12px !important; gap: 6px !important; }
+    .pw-config-panels { flex-direction: column !important; overflow: visible !important; }
+    .pw-footer-bar { flex-wrap: wrap; height: auto !important; padding: 12px !important; gap: 8px !important; }
+    .pw-chat-sidebar-overlay { position: fixed !important; top: 0; left: 0; bottom: 0; width: 85vw !important; z-index: 50; box-shadow: 4px 0 24px rgba(0,0,0,0.8); }
+    .pw-chat-main { min-width: 0 !important; }
+    .pw-history-sidebar { width: 100% !important; flex-direction: row !important; overflow-x: auto; flex-shrink: 0; border-right: none !important; border-bottom: 1px solid #1e1e26; max-height: 52px; }
+    .pw-history-sidebar .pw-sim-btn { min-width: max-content; padding: 8px 14px !important; white-space: nowrap; border-left: none !important; border-bottom: 2px solid transparent; }
+    .pw-history-sidebar .pw-sim-btn-active { border-bottom-color: #f97316 !important; border-left-color: transparent !important; }
+    .pw-history-body { flex-direction: column !important; overflow: visible !important; }
+    .pw-setup-grid { grid-template-columns: 1fr !important; }
+    .pw-header-email { display: none !important; }
+    .pw-header-discard { display: none !important; }
+    .pw-header-nav span { display: none; }
+  }
+  @media (min-width: 769px) {
+    .pw-mobile-only { display: none !important; }
+    .pw-config-panel-tabs { display: none !important; }
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -904,6 +929,20 @@ function App() {
   }, []);
 
   var _step = useState("config"); var step = _step[0]; var setStep = _step[1];
+
+  // ── RESPONSIVE ─────────────────────────────────────────────────────────────
+  var _mob = useState(function() { return window.innerWidth < 769; });
+  var isMobile = _mob[0]; var setIsMobile = _mob[1];
+  useEffect(function() {
+    function onResize() { setIsMobile(window.innerWidth < 769); }
+    window.addEventListener("resize", onResize);
+    // manage body overflow
+    document.body.style.overflow = isMobile ? "auto" : "hidden";
+    return function() { window.removeEventListener("resize", onResize); };
+  }, [isMobile]);
+  // Mobile config: which panel is active (0=category, 1=cars, 2=track)
+  var _mcp = useState(0); var mobileConfigPanel = _mcp[0]; var setMobileConfigPanel = _mcp[1];
+
   // Session config
   var _game = useState(""); var game = _game[0]; var setGame = _game[1];
   var _cat = useState(""); var category = _cat[0]; var setCategory = _cat[1];
@@ -1843,41 +1882,49 @@ function App() {
 
   // ── SHARED HEADER ───────────────────────────────────────────────────────────
   function Header() {
+    var tabs = [
+      { key: "config", label: isMobile ? "CONFIG" : "CONFIGURE", icon: "⚙" },
+      { key: "chat", label: "ENGINEER", icon: "◈" },
+      { key: "history", label: isMobile ? "SETUPS" : "SAVED SETUPS", icon: "☰" },
+    ];
     return (
-      <div style={{ height: 52, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 20px", gap: 0, position: "relative", zIndex: 20 }}>
+      <div style={{ height: isMobile ? 48 : 52, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: isMobile ? "0 12px" : "0 20px", gap: 0, position: "relative", zIndex: 20 }}>
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 28, userSelect: "none", flexShrink: 0 }}>
-          <div style={{ width: 30, height: 30, border: "2px solid " + C.ac, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1 }}>PW</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: isMobile ? 10 : 28, userSelect: "none", flexShrink: 0 }}>
+          <div style={{ width: 28, height: 28, border: "2px solid " + C.ac, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 10, color: C.ac, letterSpacing: 1 }}>PW</span>
           </div>
-          <div>
-            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.tx, lineHeight: 1 }}>PIT WALL</div>
-            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 600, color: C.ts, letterSpacing: 2, marginTop: 3 }}>SETUP ENGINEER</div>
-          </div>
+          {!isMobile && (
+            <div>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.tx, lineHeight: 1 }}>PIT WALL</div>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 600, color: C.ts, letterSpacing: 2, marginTop: 3 }}>SETUP ENGINEER</div>
+            </div>
+          )}
         </div>
 
         {/* Nav */}
-        {[
-          { key: "config", label: "CONFIGURE" },
-          { key: "chat", label: "ENGINEER" },
-          { key: "history", label: "SAVED SETUPS" },
-        ].map(function(tab) {
+        {tabs.map(function(tab) {
           var act = step === tab.key;
           return (
-            <button key={tab.key} onClick={function() {
+            <button key={tab.key} className="pw-header-nav" onClick={function() {
               if (tab.key === "config") { setStep("config"); }
               else if (tab.key === "chat") { setStep("chat"); }
               else { setStep("history"); setSelectedSetup(null); if (savedSetups.length > 0) setHistoryGame(savedSetups[0].game); }
             }} style={{
-              height: 52, padding: "0 18px", background: "transparent", border: "none",
+              height: isMobile ? 48 : 52,
+              padding: isMobile ? "0 12px" : "0 18px",
+              background: "transparent", border: "none",
               borderBottom: "2px solid " + (act ? C.ac : "transparent"),
               color: act ? C.ac : C.tm,
-              fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: 1.5,
-              display: "flex", alignItems: "center", gap: 7,
+              fontFamily: "'Chakra Petch',sans-serif",
+              fontSize: isMobile ? 11 : 11,
+              fontWeight: 600, letterSpacing: isMobile ? 0.5 : 1.5,
+              display: "flex", alignItems: "center", gap: 6,
             }}>
-              {tab.label}
+              {isMobile && <span style={{ fontSize: 13 }}>{tab.icon}</span>}
+              <span>{tab.label}</span>
               {tab.key === "history" && savedSetups.length > 0 &&
-                <span style={{ background: C.ac, color: "#000", borderRadius: 2, padding: "1px 5px", fontSize: 9, fontWeight: 700, lineHeight: 1.6 }}>{savedSetups.length}</span>}
+                <span style={{ background: C.ac, color: "#000", borderRadius: 2, padding: "1px 5px", fontSize: 10, fontWeight: 700, lineHeight: 1.6 }}>{savedSetups.length}</span>}
               {tab.key === "chat" && hasSession &&
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.ok, flexShrink: 0 }} />}
             </button>
@@ -1886,25 +1933,25 @@ function App() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Session active badge + discard */}
-        {hasSession && (
-          <button onClick={function() { setConfirmDiscard(true); }} style={{
+        {/* Session active badge + discard (desktop only) */}
+        {hasSession && !isMobile && (
+          <button className="pw-header-discard" onClick={function() { setConfirmDiscard(true); }} style={{
             marginRight: 10, padding: "4px 10px", background: "transparent",
             border: "1px solid " + C.bd, borderRadius: 3,
-            color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1,
+            color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1,
           }}>DISCARD SESSION</button>
         )}
 
         {/* User + Logout */}
-        {user && user.email && (
-          <span style={{ fontSize: 10, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", marginRight: 10, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {user && user.email && !isMobile && (
+          <span className="pw-header-email" style={{ fontSize: 11, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", marginRight: 10, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {user.email}
           </span>
         )}
         <button onClick={function() { window.sb.auth.signOut(); }} style={{
           padding: "5px 10px", background: "transparent",
           border: "1px solid " + C.bd, borderRadius: 3,
-          color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1,
+          color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1,
         }}>SAIR</button>
       </div>
     );
@@ -1953,36 +2000,52 @@ function App() {
         <Header />
 
         {/* Simulator bar */}
-        <div style={{ height: 48, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 20px", gap: 6 }}>
-          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, marginRight: 12, flexShrink: 0 }}>SIMULATOR</span>
+        <div className="pw-sim-bar" style={{ height: 48, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 20px", gap: 6 }}>
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, marginRight: 4, flexShrink: 0 }}>SIMULATOR</span>
           {Object.entries(GAMES).map(function(e2) {
             var k = e2[0]; var g = e2[1]; var sel = game === k;
             return (
-              <button key={k} onClick={function() { setGame(k); }} style={{ padding: "5px 16px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: sel ? 700 : 400, letterSpacing: 1 }}>
-                {g.name}
+              <button key={k} onClick={function() { setGame(k); setMobileConfigPanel(0); }} style={{ padding: "5px 14px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 12 : 11, fontWeight: sel ? 700 : 400, letterSpacing: 0.5 }}>
+                {isMobile ? (g.short || g.name) : g.name}
               </button>
             );
           })}
         </div>
 
+        {/* Mobile panel tab selector */}
+        {isMobile && (
+          <div style={{ display: "flex", borderBottom: "1px solid " + C.bd, background: C.sfc, flexShrink: 0 }}>
+            {[["CATEGORY","0"],["CARS","1"],["TRACK","2"]].map(function(t, ti) {
+              var act = mobileConfigPanel === ti;
+              var done = (ti === 0 && category) || (ti === 1 && selectedCars.length > 0) || (ti === 2 && track);
+              return (
+                <button key={ti} onClick={function() { setMobileConfigPanel(ti); }} style={{ flex: 1, padding: "12px 8px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : (done ? C.ts : C.td), fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                  {t[0]}
+                  {done && !act && <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.ok, flexShrink: 0 }} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* 3-panel area — fills remaining height */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+        <div className="pw-config-panels" style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
 
           {/* Panel 1: Category */}
-          <div style={{ width: 244, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column" }}>
+          <div style={{ width: isMobile ? "100%" : 244, display: (!isMobile || mobileConfigPanel === 0) ? "flex" : "none", flexShrink: 0, flexDirection: "column", background: C.sf, borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none" }}>
             <div style={{ height: 38, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>CATEGORY</span>
-              {game && <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, color: C.td }}>{Object.keys(cg.categories).length}</span>}
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td }}>CATEGORY</span>
+              {game && <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: C.td }}>{Object.keys(cg.categories).length}</span>}
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
               {!game
-                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center", lineHeight: 1.6 }}>Select a simulator<br/>above</div>
+                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>Select a simulator<br/>above</div>
                 : Object.entries(cg.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
                     var k = e2[0]; var cat = e2[1]; var sel = category === k;
                     return (
-                      <button key={k} onClick={function() { setCategory(k); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "9px 12px 9px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
+                      <button key={k} onClick={function() { setCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
                         <span>{cat.name}</span>
-                        <span style={{ fontSize: 11, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length}</span>
+                        <span style={{ fontSize: 12, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length}</span>
                       </button>
                     );
                   })
@@ -1991,23 +2054,23 @@ function App() {
           </div>
 
           {/* Panel 2: Cars */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid " + C.bd, minWidth: 0, background: C.bg }}>
-            <div style={{ height: 38, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CARS</span>
+          <div style={{ flex: isMobile ? "none" : 1, width: isMobile ? "100%" : "auto", display: (!isMobile || mobileConfigPanel === 1) ? "flex" : "none", flexDirection: "column", borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none", minWidth: 0, background: C.bg }}>
+            <div style={{ height: 44, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CARS</span>
               {category && <>
-                <input placeholder="Search..." value={carFilter} onChange={function(e) { setCarFilter(e.target.value); }} style={{ flex: 1, maxWidth: 200, padding: "4px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 12 }} />
-                <span style={{ fontSize: 9, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{selectedCars.length}/{allCars.length}</span>
-                <button onClick={selAll} style={{ padding: "3px 9px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.tm, fontSize: 8, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, flexShrink: 0 }}>{selectedCars.length === allCars.length ? "CLEAR" : "ALL"}</button>
+                <input placeholder="Search..." value={carFilter} onChange={function(e) { setCarFilter(e.target.value); }} style={{ flex: 1, maxWidth: 240, padding: "5px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
+                <span style={{ fontSize: 11, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{selectedCars.length}/{allCars.length}</span>
+                <button onClick={selAll} style={{ padding: "4px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.tm, fontSize: 11, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, flexShrink: 0 }}>{selectedCars.length === allCars.length ? "CLEAR" : "ALL"}</button>
               </>}
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
               {!category
-                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center" }}>Select a category</div>
+                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>Select a category</div>
                 : fCars.map(function(car) {
                     var sel = selectedCars.includes(car);
                     return (
-                      <button key={car} onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "8px 10px 8px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 13, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
-                        <span style={{ width: 14, height: 14, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
+                      <button key={car} onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 10px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 14, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                        <span style={{ width: 16, height: 16, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
                         {car}
                       </button>
                     );
@@ -2017,15 +2080,15 @@ function App() {
           </div>
 
           {/* Panel 3: Tracks */}
-          <div style={{ width: 296, flexShrink: 0, display: "flex", flexDirection: "column", background: C.bg }}>
-            <div style={{ height: 38, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>TRACK</span>
-              {game && <input placeholder="Search..." value={trackFilter} onChange={function(e) { setTrackFilter(e.target.value); }} style={{ flex: 1, padding: "4px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 12 }} />}
-              {game && <span style={{ fontSize: 9, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{fTrks.length}</span>}
+          <div style={{ width: isMobile ? "100%" : 296, display: (!isMobile || mobileConfigPanel === 2) ? "flex" : "none", flexShrink: 0, flexDirection: "column", background: C.bg }}>
+            <div style={{ height: 44, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>TRACK</span>
+              {game && <input placeholder="Search..." value={trackFilter} onChange={function(e) { setTrackFilter(e.target.value); }} style={{ flex: 1, padding: "5px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />}
+              {game && <span style={{ fontSize: 11, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{fTrks.length}</span>}
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
               {!game
-                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 13, textAlign: "center" }}>Select a simulator above</div>
+                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>Select a simulator above</div>
                 : (function() {
                     var grouped = {};
                     var groupOrder = [];
@@ -2038,11 +2101,11 @@ function App() {
                     return groupOrder.map(function(country) {
                       return (
                         <div key={country}>
-                          <div style={{ padding: "10px 14px 3px", fontSize: 9, letterSpacing: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", textTransform: "uppercase", opacity: 0.7, borderBottom: "1px solid " + C.bd, marginBottom: 2 }}>{country}</div>
+                          <div style={{ padding: "10px 14px 3px", fontSize: 11, letterSpacing: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", textTransform: "uppercase", opacity: 0.7, borderBottom: "1px solid " + C.bd, marginBottom: 2 }}>{country}</div>
                           {grouped[country].map(function(t) {
                             var sel = track === t;
                             return (
-                              <button key={t} onClick={function() { setTrack(t); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px 8px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                              <button key={t} onClick={function() { setTrack(t); if (isMobile && mobileConfigPanel === 2) { /* stay on track panel */ } }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
                                 {t}
                               </button>
                             );
@@ -2057,13 +2120,13 @@ function App() {
         </div>
 
         {/* Footer: Session type + Laps + Conditions + Generate */}
-        <div style={{ height: 58, flexShrink: 0, borderTop: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", padding: "0 20px", gap: 10 }}>
+        <div className="pw-footer-bar" style={{ flexShrink: 0, borderTop: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", flexWrap: "wrap", padding: "0 20px", gap: 10, minHeight: 58 }}>
 
-          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>SESSION</span>
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>SESSION</span>
           {["qualifying", "race"].map(function(st) {
             var sel = sessionType === st;
             return (
-              <button key={st} onClick={function() { setSessionType(st); }} style={{ padding: "5px 12px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
+              <button key={st} onClick={function() { setSessionType(st); }} style={{ padding: "6px 14px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 12, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
                 {st === "qualifying" ? "QUALIFYING" : "RACE"}
               </button>
             );
@@ -2071,27 +2134,27 @@ function App() {
 
           {sessionType === "race" && (
             <>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0, marginLeft: 4 }}>LAPS</span>
+              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0, marginLeft: 4 }}>LAPS</span>
               <input type="number" min="1" max="9999" value={raceLaps} onChange={function(e) { setRaceLaps(e.target.value); }} placeholder="0"
-                style={{ width: 62, padding: "5px 8px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13, textAlign: "center" }} />
+                style={{ width: 66, padding: "6px 8px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 14, textAlign: "center" }} />
             </>
           )}
 
-          <div style={{ width: 1, height: 22, background: C.bd, flexShrink: 0, margin: "0 6px" }} />
+          <div style={{ width: 1, height: 22, background: C.bd, flexShrink: 0, margin: "0 4px" }} />
 
-          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CONDITIONS</span>
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CONDITIONS</span>
           {CONDITIONS.map(function(c) {
             var sel = condition === c;
             return (
-              <button key={c} onClick={function() { setCondition(c); }} style={{ padding: "5px 12px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
-                {c}
+              <button key={c} onClick={function() { setCondition(c); }} style={{ padding: "6px 12px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 11 : 11, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
+                {isMobile ? c.split(" /")[0] : c}
               </button>
             );
           })}
 
           <div style={{ flex: 1 }} />
 
-          {canGo && (
+          {canGo && !isMobile && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 14, fontSize: 12, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>
               <span style={{ color: C.td }}>{selectedCars.length} car{selectedCars.length !== 1 ? "s" : ""}</span>
               <span style={{ color: C.td }}>·</span>
@@ -2101,7 +2164,7 @@ function App() {
             </div>
           )}
 
-          <button onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ padding: "11px 30px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 3, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0 }}>
+          <button onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ padding: "12px 24px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 3, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 2, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0, width: isMobile ? "100%" : "auto" }}>
             GENERATE SETUP
           </button>
         </div>
@@ -2134,9 +2197,9 @@ function App() {
       var _isCustomMap = !!_mapCustom;
       var _mapLoading2 = trackMapLoading === _mapKey2;
       return (
-        <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <div style={{ height: isMobile ? "auto" : "100%", minHeight: isMobile ? "100vh" : "auto", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
           <Header />
-          <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
+          <div style={{ flex: 1, overflowY: isMobile ? "visible" : "auto", padding: isMobile ? "16px 14px" : "22px 28px" }}>
             <div>
               <button onClick={function() { setSelectedSetup(null); }} style={{ background: "none", border: "none", color: C.ts, fontSize: 12, cursor: "pointer", marginBottom: 20, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>← BACK TO SAVED SETUPS</button>
 
@@ -2237,24 +2300,31 @@ function App() {
     }
 
     return (
-      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+      <div style={{ height: isMobile ? "auto" : "100%", minHeight: isMobile ? "100vh" : "auto", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
         <Header />
-        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+        <div className="pw-history-body" style={{ flex: 1, display: "flex", overflow: isMobile ? "visible" : "hidden", minHeight: 0 }}>
 
-          {/* Game sidebar */}
-          <div style={{ width: 220, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column" }}>
-            <div style={{ height: 38, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>SIMULATORS</span>
-            </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px" }}>
+          {/* Game sidebar — horizontal scroll on mobile */}
+          <div className="pw-history-sidebar" style={{ width: isMobile ? "100%" : 220, flexShrink: 0, background: C.sf, borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none", display: "flex", flexDirection: isMobile ? "row" : "column", overflowX: isMobile ? "auto" : "visible", overflowY: isMobile ? "hidden" : "auto" }}>
+            {!isMobile && (
+              <div style={{ height: 38, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+                <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td }}>SIMULATORS</span>
+              </div>
+            )}
+            <div style={{ flex: 1, overflowY: isMobile ? "hidden" : "auto", overflowX: isMobile ? "auto" : "hidden", padding: isMobile ? "0" : "6px 4px", display: isMobile ? "flex" : "block", alignItems: "center" }}>
               {gameNames.length === 0
-                ? <div style={{ padding: "24px 14px", color: C.td, fontSize: 13, textAlign: "center" }}>No saved setups</div>
+                ? <div style={{ padding: "12px 14px", color: C.td, fontSize: 13, whiteSpace: "nowrap" }}>No saved setups</div>
                 : gameNames.map(function(gName) {
                     var sel = gName === activeGame;
-                    return (
+                    return isMobile ? (
+                      <button key={gName} onClick={function() { setHistoryGame(gName); }} style={{ flexShrink: 0, padding: "12px 16px", background: "transparent", border: "none", borderBottom: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+                        {gName}
+                        <span style={{ fontSize: 10, color: sel ? C.acb : C.td }}>{gameGroups[gName].length}</span>
+                      </button>
+                    ) : (
                       <button key={gName} onClick={function() { setHistoryGame(gName); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "10px 12px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 13, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0", textAlign: "left" }}>
                         <span>{gName}</span>
-                        <span style={{ fontSize: 10, color: sel ? C.acb : C.td, flexShrink: 0, marginLeft: 6 }}>{gameGroups[gName].length}</span>
+                        <span style={{ fontSize: 11, color: sel ? C.acb : C.td, flexShrink: 0, marginLeft: 6 }}>{gameGroups[gName].length}</span>
                       </button>
                     );
                   })
@@ -2263,35 +2333,35 @@ function App() {
           </div>
 
           {/* Setups grid */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px 22px", background: C.bg }}>
+          <div style={{ flex: 1, overflowY: isMobile ? "visible" : "auto", padding: isMobile ? "16px 14px" : "20px 22px", background: C.bg }}>
             {!activeGame ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
                 <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 28, letterSpacing: 5, opacity: 0.06, color: C.tx, marginBottom: 14 }}>[ ]</div>
                 <div style={{ fontSize: 14, color: C.td }}>No saved setups yet</div>
               </div>
             ) : (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: 2, color: C.tx }}>{activeGame}</span>
-                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, color: C.td, letterSpacing: 1 }}>{groupSetups.length} SETUP{groupSetups.length !== 1 ? "S" : ""}</span>
+                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 2, color: C.tx }}>{activeGame}</span>
+                  <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: C.td, letterSpacing: 1 }}>{groupSetups.length} SETUP{groupSetups.length !== 1 ? "S" : ""}</span>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 10 }}>
+                <div className="pw-setup-grid" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(290px, 1fr))", gap: 10 }}>
                   {groupSetups.map(function(s) {
                     return (
                       <div key={s.id} onClick={function() { setSelectedSetup(s); }} style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 5, padding: "16px 18px", cursor: "pointer", position: "relative" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, letterSpacing: 1.5, color: s.sessionType === "qualifying" ? C.warn : C.ac }}>{s.sessionType === "qualifying" ? "QUALIFYING" : "RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : "")}</span>
+                          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 1.5, color: s.sessionType === "qualifying" ? C.warn : C.ac }}>{s.sessionType === "qualifying" ? "QUALIFYING" : "RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : "")}</span>
                           <div style={{ display: "flex", gap: 2 }}>
-                            <button onClick={function(e) { e.stopPropagation(); continueFromSetup(s); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 9, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5 }}>OPEN</button>
-                            <button onClick={function(e) { e.stopPropagation(); deleteSetup(s.id); }} style={{ padding: "2px 7px", background: "transparent", border: "none", color: C.td, fontSize: 12 }}>✕</button>
+                            <button onClick={function(e) { e.stopPropagation(); continueFromSetup(s); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 11, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5 }}>OPEN</button>
+                            <button onClick={function(e) { e.stopPropagation(); deleteSetup(s.id); }} style={{ padding: "3px 8px", background: "transparent", border: "none", color: C.td, fontSize: 14 }}>✕</button>
                           </div>
                         </div>
-                        <div style={{ fontSize: 16, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{s.track}</div>
-                        <div style={{ fontSize: 13, color: C.ts, marginBottom: 8 }}>{s.category}</div>
-                        <div style={{ fontSize: 12, color: C.tm, marginBottom: 10 }}>{s.cars.slice(0, 2).join(", ")}{s.cars.length > 2 ? " +" + (s.cars.length - 2) + " more" : ""}</div>
+                        <div style={{ fontSize: 17, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{s.track}</div>
+                        <div style={{ fontSize: 14, color: C.ts, marginBottom: 8 }}>{s.category}</div>
+                        <div style={{ fontSize: 13, color: C.tm, marginBottom: 10 }}>{s.cars.slice(0, 2).join(", ")}{s.cars.length > 2 ? " +" + (s.cars.length - 2) + " more" : ""}</div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTop: "1px solid " + C.bd }}>
-                          <span style={{ fontSize: 11, color: C.td }}>{new Date(s.ts).toLocaleDateString("pt-BR")}</span>
-                          <span style={{ fontSize: 11, color: s.condition === "Wet" ? "#60a5fa" : C.tm }}>{s.condition}</span>
+                          <span style={{ fontSize: 12, color: C.td }}>{new Date(s.ts).toLocaleDateString("pt-BR")}</span>
+                          <span style={{ fontSize: 12, color: s.condition === "Wet" ? "#60a5fa" : C.tm }}>{s.condition}</span>
                         </div>
                       </div>
                     );
@@ -2308,19 +2378,26 @@ function App() {
 
   // ── ENGINEER / CHAT ─────────────────────────────────────────────────────────
   return (
-    <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+    <div style={{ height: isMobile ? "auto" : "100%", minHeight: isMobile ? "100vh" : "auto", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
       <Header />
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+      {/* Mobile sidebar overlay backdrop */}
+      {isMobile && sidebarOpen && (
+        <div onClick={function() { setSidebarOpen(false); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
+      )}
+      <div style={{ flex: 1, display: "flex", overflow: isMobile ? "visible" : "hidden", minHeight: 0, position: "relative" }}>
 
         {/* Sidebar */}
         {sidebarOpen && (
-          <div style={{ width: 262, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div className={isMobile ? "pw-chat-sidebar-overlay" : ""} style={{ width: isMobile ? "85vw" : 262, flexShrink: 0, background: C.sf, borderRight: "1px solid " + C.bd, display: "flex", flexDirection: "column", overflow: "hidden", position: isMobile ? "fixed" : "relative", top: isMobile ? 0 : "auto", bottom: isMobile ? 0 : "auto", left: isMobile ? 0 : "auto", zIndex: isMobile ? 50 : "auto", paddingTop: isMobile ? 48 : 0 }}>
             {/* Session info */}
             <div style={{ padding: "14px 16px", borderBottom: "1px solid " + C.bd }}>
-              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td, marginBottom: 10 }}>SESSION</div>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>SESSION</span>
+                {isMobile && <button onClick={function() { setSidebarOpen(false); }} style={{ background: "none", border: "none", color: C.td, fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 }}>✕</button>}
+              </div>
               {[["Simulator", cg ? cg.name : "—"], ["Category", cc ? cc.name : "—"], ["Track", track || "—"], ["Conditions", condition], ["Session Type", sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : "")]].map(function(r) {
                 return (
-                  <div key={r[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: 12, marginBottom: 6 }}>
+                  <div key={r[0]} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: 13, marginBottom: 7 }}>
                     <span style={{ color: C.td, flexShrink: 0 }}>{r[0]}</span>
                     <span style={{ color: C.ts, fontWeight: 500, maxWidth: 148, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r[1]}</span>
                   </div>
@@ -2345,7 +2422,7 @@ function App() {
               return (
                 <div style={{ borderBottom: "1px solid " + C.bd }}>
                   <div style={{ padding: "8px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>
+                    <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td }}>
                       TRACK MAP{isCustom ? <span style={{ color: C.ac, marginLeft: 5 }}>✦ CUSTOM</span> : ""}
                     </span>
                     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -2378,18 +2455,18 @@ function App() {
             {/* Telemetry */}
             <div style={{ borderBottom: "1px solid " + C.bd }}>
               <div style={{ padding: "8px 16px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>
+                <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td }}>
                   TELEMETRY{telemetry ? <span style={{ color: C.ok, marginLeft: 5 }}>● LOADED</span> : ""}
                 </span>
                 <div style={{ display: "flex", gap: 4 }}>
-                  <label style={{ padding: "2px 7px", background: telemetry ? C.acg : "transparent", border: "1px solid " + (telemetry ? C.ac : C.bd), borderRadius: 2, color: telemetry ? C.ac : C.tm, fontSize: 7, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, cursor: "pointer", fontWeight: 700 }}>
+                  <label style={{ padding: "3px 9px", background: telemetry ? C.acg : "transparent", border: "1px solid " + (telemetry ? C.ac : C.bd), borderRadius: 2, color: telemetry ? C.ac : C.tm, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, cursor: "pointer", fontWeight: 700 }}>
                     {telemParsing ? "..." : (telemetry ? "↑ REPLACE" : "↑ IMPORT")}
                     <input type="file" accept=".csv,.txt,.log" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) parseTelemetryFile(e.target.files[0]); e.target.value = ""; }} />
                   </label>
                   {telemetry && <button onClick={function() { setTelemetry(null); }} title="Remover telemetria" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: "2px 4px" }}>✕</button>}
                 </div>
               </div>
-              {telemParsing && <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, color: C.td, fontSize: 9 }}><Loader /><span>PROCESSANDO...</span></div>}
+              {telemParsing && <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, color: C.td, fontSize: 11 }}><Loader /><span>PROCESSANDO...</span></div>}
               {telemetry && !telemParsing && (
                 <div style={{ padding: "0 10px 10px" }}>
                   <div style={{ background: C.sfh, borderRadius: 3, padding: "8px 10px" }}>
@@ -2431,20 +2508,20 @@ function App() {
 
             {/* Actions */}
             <div style={{ padding: "10px 12px", borderBottom: "1px solid " + C.bd, display: "flex", flexDirection: "column", gap: 8 }}>
-              <button onClick={saveSetup} disabled={messages.length < 2} style={{ width: "100%", padding: "8px", background: messages.length >= 2 ? C.acg : "transparent", border: "1px solid " + (messages.length >= 2 ? C.ac : C.bd), borderRadius: 3, color: messages.length >= 2 ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, cursor: messages.length >= 2 ? "pointer" : "not-allowed", textTransform: "uppercase" }}>
+              <button onClick={saveSetup} disabled={messages.length < 2} style={{ width: "100%", padding: "9px", background: messages.length >= 2 ? C.acg : "transparent", border: "1px solid " + (messages.length >= 2 ? C.ac : C.bd), borderRadius: 3, color: messages.length >= 2 ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: messages.length >= 2 ? "pointer" : "not-allowed", textTransform: "uppercase" }}>
                 SAVE A COPY
               </button>
-              <button onClick={function() { setStep("config"); }} style={{ width: "100%", padding: "7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase" }}>
+              <button onClick={function() { setStep("config"); }} style={{ width: "100%", padding: "8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase" }}>
                 BACK TO CONFIGURE
               </button>
             </div>
 
             {/* Quick feedback */}
-            <div style={{ padding: "10px 14px 4px", fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 2, color: C.td }}>DRIVER FEEDBACK</div>
+            <div style={{ padding: "10px 14px 4px", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td }}>DRIVER FEEDBACK</div>
             <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
               {qf.map(function(f, i) {
                 return (
-                  <button key={i} onClick={function() { if (!loading) sendMsg(f); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", marginBottom: 2, background: "transparent", border: "1px solid transparent", borderRadius: 3, color: C.ts, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1, lineHeight: 1.4 }}>
+                  <button key={i} onClick={function() { if (!loading) sendMsg(f); if (isMobile) setSidebarOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", marginBottom: 2, background: "transparent", border: "1px solid transparent", borderRadius: 3, color: C.ts, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1, lineHeight: 1.5 }}>
                     {f}
                   </button>
                 );
@@ -2454,11 +2531,11 @@ function App() {
         )}
 
         {/* Main chat */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div className="pw-chat-main" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: isMobile ? "calc(100vh - 48px)" : "auto" }}>
           {/* Chat topbar */}
           <div style={{ height: 40, flexShrink: 0, padding: "0 16px", borderBottom: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", gap: 10 }}>
-            <button onClick={function() { setSidebarOpen(!sidebarOpen); }} style={{ background: "none", border: "none", color: C.td, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>{sidebarOpen ? "◁" : "▷"}</button>
-            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, color: C.tm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0.5, flex: 1, minWidth: 0 }}>
+            <button onClick={function() { setSidebarOpen(!sidebarOpen); }} style={{ background: "none", border: "none", color: C.td, fontSize: 14, cursor: "pointer", padding: "4px 6px" }}>{sidebarOpen ? "◁" : "☰"}</button>
+            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: C.tm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0.5, flex: 1, minWidth: 0 }}>
               {cg ? <span style={{ color: C.ts }}>{cg.name}</span> : ""}
               {cc ? <span style={{ color: C.td }}> › {cc.name}</span> : ""}
               {track ? <span style={{ color: C.td }}> › {track}</span> : ""}
@@ -2467,13 +2544,13 @@ function App() {
             </div>
             {messages.length >= 2 && (
               <button onClick={function() { setEditMode(function(p) { var next = !p; if (!next) setActiveCell(null); return next; }); }}
-                style={{ padding: "4px 12px", background: editMode ? "rgba(74,222,128,0.12)" : "transparent", border: "1px solid " + (editMode ? "#4ade80" : C.bd), borderRadius: 3, color: editMode ? "#4ade80" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, cursor: "pointer", flexShrink: 0, fontWeight: editMode ? 700 : 400 }}>
-                {editMode ? "✓ EDITANDO" : "EDITAR SETUP"}
+                style={{ padding: "4px 12px", background: editMode ? "rgba(74,222,128,0.12)" : "transparent", border: "1px solid " + (editMode ? "#4ade80" : C.bd), borderRadius: 3, color: editMode ? "#4ade80" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, cursor: "pointer", flexShrink: 0, fontWeight: editMode ? 700 : 400 }}>
+                {editMode ? "✓ EDITANDO" : "EDITAR"}
               </button>
             )}
             {editMode && Object.keys(manualEdits).length > 0 && (
               <button onClick={function() { setManualEdits({}); setActiveCell(null); setToast("Edições removidas"); }}
-                style={{ padding: "4px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>
+                style={{ padding: "4px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>
                 LIMPAR
               </button>
             )}
@@ -2531,12 +2608,12 @@ function App() {
           </div>
 
           {/* Input */}
-          <div style={{ padding: "14px 22px", borderTop: "1px solid " + C.bd, background: C.sf, flexShrink: 0 }}>
+          <div style={{ padding: isMobile ? "10px 14px" : "14px 22px", borderTop: "1px solid " + C.bd, background: C.sf, flexShrink: 0 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-              <textarea value={input} onChange={function(e) { setInput(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!loading) sendMsg(input); } }} placeholder="Describe car behavior, request adjustments, or ask about strategy..." rows={2}
-                style={{ flex: 1, resize: "none", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 14, lineHeight: 1.6 }} />
-              <button onClick={function() { if (!loading) sendMsg(input); }} disabled={loading || !input.trim()} style={{ padding: "11px 26px", background: (loading || !input.trim()) ? C.bd : C.ac, border: "none", borderRadius: 4, color: (loading || !input.trim()) ? C.td : "#000", fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1.5, cursor: (loading || !input.trim()) ? "not-allowed" : "pointer", textTransform: "uppercase", height: 50, flexShrink: 0 }}>
-                SEND
+              <textarea value={input} onChange={function(e) { setInput(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!loading) sendMsg(input); } }} placeholder="Descreva o comportamento do carro ou peça ajustes..." rows={isMobile ? 2 : 2}
+                style={{ flex: 1, resize: "none", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: isMobile ? 15 : 14, lineHeight: 1.6 }} />
+              <button onClick={function() { if (!loading) sendMsg(input); }} disabled={loading || !input.trim()} style={{ padding: "11px 20px", background: (loading || !input.trim()) ? C.bd : C.ac, border: "none", borderRadius: 4, color: (loading || !input.trim()) ? C.td : "#000", fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 1, cursor: (loading || !input.trim()) ? "not-allowed" : "pointer", textTransform: "uppercase", height: 50, flexShrink: 0 }}>
+                {isMobile ? "▶" : "SEND"}
               </button>
             </div>
           </div>
