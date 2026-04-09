@@ -1211,11 +1211,17 @@ function App() {
     var trkVal = track || fb.track || "";
     var condVal = condition || fb.condition || "Dry";
     var g = GAMES[gKey];
+    // Resolve category name: built-in or custom MOD category
+    var catName = (g && g.categories[catKey]) ? g.categories[catKey].name
+      : (customMods[gKey] && customMods[gKey].customCategories && customMods[gKey].customCategories[catKey])
+        ? customMods[gKey].customCategories[catKey]
+        : (catKey || fb.category || "");
+    var isManualSetup = messages.length === 1 && messages[0].manual === true;
     var s = {
       id: activeSetupSrc ? activeSetupSrc.id : Date.now().toString(),
       game: g ? g.name : (gKey || fb.game || ""),
       gameKey: gKey,
-      category: (g && g.categories[catKey]) ? g.categories[catKey].name : (catKey || fb.category || ""),
+      category: catName,
       categoryKey: catKey,
       cars: selectedCars.length > 0 ? selectedCars.slice() : (fb.cars || []),
       track: trkVal,
@@ -1224,8 +1230,9 @@ function App() {
       raceLaps: raceLaps || fb.raceLaps || "",
       messages: messages.slice(),
       ts: new Date().toISOString(),
-      notes: "",
+      notes: fb.notes || "",
       manualEdits: Object.assign({}, manualEdits),
+      isManual: isManualSetup || fb.isManual || false,
     };
     var existing = savedSetups.some(function(x) { return x.id === s.id; });
     var n = existing
@@ -1661,8 +1668,20 @@ function App() {
     return lines.join("\n");
   }
 
+  function getCategoryName() {
+    var g = GAMES[game];
+    if (g && g.categories && g.categories[category]) return g.categories[category].name;
+    // Custom MOD category
+    if (customMods[game] && customMods[game].customCategories && customMods[game].customCategories[category]) {
+      return customMods[game].customCategories[category];
+    }
+    return category || "Custom";
+  }
+
   function buildSystemPrompt() {
-    var g = GAMES[game]; var cat = g.categories[category];
+    var g = GAMES[game];
+    var gameName = g ? g.name : (game || "Sim Racing");
+    var catName = getCategoryName();
     var schema = getSetupSchema(game);
     var sessionPart = sessionType === "qualifying"
       ? "This is a QUALIFYING setup — maximize single-lap peak performance. Prioritize grip and minimal drag for this circuit layout."
@@ -1677,13 +1696,19 @@ function App() {
       ? "\n\n" + schema + "\nCRITICAL RULES:\n1. ONLY suggest parameters that exist in the schema above for this game.\n2. Use the EXACT parameter names listed — not paraphrases.\n3. Stay strictly within the stated value ranges. Never suggest values outside them.\n4. Skip parameters marked as greyed-out/unavailable in game for the chosen car category.\n5. For AMS2 Downforce: values are wing steps 0–60. Default formula baseline is ~42. NEVER suggest single-digit downforce values.\n"
       : "";
 
+    // For MOD cars without schema, add a generic note
+    var modNote = (!g || !g.categories[category])
+      ? "\n\nNOTE: This is a MOD/custom car category (\"" + catName + "\"). Provide a comprehensive generic sim racing setup covering all typical adjustable parameters: aerodynamics, suspension geometry, dampers, springs, anti-roll bars, differential, brakes, and tyres. Adapt recommendations to the car description provided."
+      : "";
+
     return [
-      'You are an elite sim racing setup engineer with expert knowledge of "' + g.name + '".',
+      'You are an elite sim racing setup engineer with expert knowledge of "' + gameName + '".',
       "",
-      "SESSION: " + g.name + " | " + cat.name + " | Cars: " + selectedCars.join(", ") + " | Track: " + track + " | Conditions: " + condition,
+      "SESSION: " + gameName + " | " + catName + " | Cars: " + selectedCars.join(", ") + " | Track: " + track + " | Conditions: " + condition,
       sessionPart,
       stratPart,
       schemaBlock,
+      modNote,
       telemNote,
       "",
       "OUTPUT FORMAT RULES:",
@@ -1721,11 +1746,25 @@ function App() {
 
   function startSession() {
     var g = GAMES[game];
+    var gameName = g ? g.name : (game || "the simulator");
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
-      sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + g.name + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : ""));
+      sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + gameName + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : ""));
     }, 80);
+  }
+
+  function startManualSession() {
+    var g = GAMES[game];
+    var gameName = g ? g.name : (game || "the simulator");
+    var catName = getCategoryName();
+    var sTypeTxt = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " (" + raceLaps + " laps)" : "");
+    var placeholder = "## MANUAL SETUP\n\n**Simulator:** " + gameName + "\n**Category:** " + catName + "\n**Car(s):** " + selectedCars.join(", ") + "\n**Track:** " + track + "\n**Conditions:** " + condition + "\n**Session:** " + sTypeTxt + "\n\n---\n\n_This setup was created manually. Edit any parameter below by clicking on it in Edit Mode._\n\n### Aerodynamics\n| Parameter | Value |\n|---|---|\n| Front Wing | — |\n| Rear Wing | — |\n\n### Suspension\n| Parameter | Value |\n|---|---|\n| Front Ride Height | — |\n| Rear Ride Height | — |\n| Front Spring Rate | — |\n| Rear Spring Rate | — |\n| Front Damper | — |\n| Rear Damper | — |\n| Front Anti-Roll Bar | — |\n| Rear Anti-Roll Bar | — |\n\n### Tyres\n| Parameter | Value |\n|---|---|\n| Front Tyre Pressure | — |\n| Rear Tyre Pressure | — |\n| Front Camber | — |\n| Rear Camber | — |\n| Front Toe | — |\n| Rear Toe | — |\n\n### Differential\n| Parameter | Value |\n|---|---|\n| Preload | — |\n| Power | — |\n| Coast | — |\n\n### Brakes\n| Parameter | Value |\n|---|---|\n| Brake Bias | — |\n| Brake Pressure | — |";
+    setStep("chat");
+    setMessages([{ role: "assistant", content: placeholder, manual: true }]);
+    setManualEdits({});
+    setEditMode(true);
+    setActiveSetupSrc(null);
   }
 
 
@@ -2352,6 +2391,9 @@ function App() {
             </div>
           )}
 
+          <button onClick={canGo ? startManualSession : undefined} disabled={!canGo} style={{ padding: "12px 18px", background: "transparent", border: "1px solid " + (canGo ? C.bd : C.bd), borderRadius: 3, color: canGo ? C.ts : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, letterSpacing: 1.5, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0, width: isMobile ? "100%" : "auto" }}>
+            MANUAL
+          </button>
           <button onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ padding: "12px 24px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 3, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 2, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0, width: isMobile ? "100%" : "auto" }}>
             GENERATE SETUP
           </button>
@@ -2619,7 +2661,10 @@ function App() {
               <div style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "20px 24px", marginBottom: 16, display: "flex", gap: 20, alignItems: "flex-start" }}>
                 {/* Left: info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1.5, marginBottom: 7 }}>{selectedSetup.game}</div>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 9, color: C.ac, letterSpacing: 1.5, marginBottom: 7, display: "flex", alignItems: "center", gap: 8 }}>
+                    {selectedSetup.game}
+                    {selectedSetup.isManual && <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 6px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 2, color: "#a5b4fc" }}>✎ MANUAL</span>}
+                  </div>
                   <div style={{ fontSize: 20, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{selectedSetup.track}</div>
                   <div style={{ fontSize: 13, color: C.ts, marginBottom: 10 }}>{selectedSetup.category}  ·  {selectedSetup.condition}  ·  <span style={{ color: C.ac }}>{selectedSetup.sessionType === "qualifying" ? "Qualifying" : "Race" + (selectedSetup.raceLaps ? " · " + selectedSetup.raceLaps + " laps" : "")}</span></div>
                   <div style={{ fontSize: 12, color: C.tm, marginBottom: 16 }}>Cars: <span style={{ color: C.ts }}>{selectedSetup.cars.join(", ")}</span></div>
@@ -2762,7 +2807,10 @@ function App() {
                     return (
                       <div key={s.id} onClick={function() { setSelectedSetup(s); }} style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 5, padding: "16px 18px", cursor: "pointer", position: "relative" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 1.5, color: s.sessionType === "qualifying" ? C.warn : C.ac }}>{s.sessionType === "qualifying" ? "QUALIFYING" : "RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : "")}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 1.5, color: s.sessionType === "qualifying" ? C.warn : C.ac }}>{s.sessionType === "qualifying" ? "QUALIFYING" : "RACE" + (s.raceLaps ? " · " + s.raceLaps + "L" : "")}</span>
+                            {s.isManual && <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 6px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 2, color: "#a5b4fc", fontFamily: "'Chakra Petch',sans-serif" }}>✎ MANUAL</span>}
+                          </div>
                           <div style={{ display: "flex", gap: 2 }}>
                             <button onClick={function(e) { e.stopPropagation(); continueFromSetup(s); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 11, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5 }}>OPEN</button>
                             <button onClick={function(e) { e.stopPropagation(); deleteSetup(s.id); }} style={{ padding: "3px 8px", background: "transparent", border: "none", color: C.td, fontSize: 14 }}>✕</button>
@@ -2807,10 +2855,15 @@ function App() {
                 <span>SESSION</span>
                 {isMobile && <button onClick={function() { setSidebarOpen(false); }} style={{ background: "none", border: "none", color: C.td, fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 }}>✕</button>}
               </div>
+              {messages.length > 0 && messages[0].manual && (
+                <div style={{ marginBottom: 10, padding: "5px 10px", background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 3, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 9, letterSpacing: 1.5, color: "#a5b4fc", fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700 }}>✎ MANUAL SETUP</span>
+                </div>
+              )}
               {(function() {
                 var fb = activeSetupSrc || {};
                 var simName = cg ? cg.name : (fb.game || "—");
-                var catName = cc ? cc.name : (fb.category || "—");
+                var catName = (cc ? cc.name : null) || getCategoryName() || (fb.category || "—");
                 var trkName = track || fb.track || "—";
                 var cond = condition || fb.condition || "—";
                 var sessLabel = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : "");
@@ -2932,9 +2985,12 @@ function App() {
 
             {/* Actions */}
             <div style={{ padding: "10px 12px", borderBottom: "1px solid " + C.bd, display: "flex", flexDirection: "column", gap: 8 }}>
-              <button onClick={saveSetup} disabled={messages.length < 2} style={{ width: "100%", padding: "9px", background: messages.length >= 2 ? C.acg : "transparent", border: "1px solid " + (messages.length >= 2 ? C.ac : C.bd), borderRadius: 3, color: messages.length >= 2 ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: messages.length >= 2 ? "pointer" : "not-allowed", textTransform: "uppercase" }}>
-                SAVE A COPY
-              </button>
+              {(function() {
+                var canSave = messages.length >= 2 || (messages.length === 1 && messages[0].manual);
+                return <button onClick={saveSetup} disabled={!canSave} style={{ width: "100%", padding: "9px", background: canSave ? C.acg : "transparent", border: "1px solid " + (canSave ? C.ac : C.bd), borderRadius: 3, color: canSave ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: canSave ? "pointer" : "not-allowed", textTransform: "uppercase" }}>
+                  SAVE A COPY
+                </button>;
+              })()}
               <button onClick={function() { setStep("config"); }} style={{ width: "100%", padding: "8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase" }}>
                 BACK TO CONFIGURE
               </button>
@@ -3047,6 +3103,7 @@ function App() {
     </div>
   );
 }
+
 
 ReactDOM.render(<App />, document.getElementById("root"));
 </script>

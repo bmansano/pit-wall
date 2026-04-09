@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formula Edge — Setup Interlagos | AMS2</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0f11;
+    --surface: #16181c;
+    --surface2: #1e2027;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f0;
+    --text2: #9a9da8;
+    --text3: #5a5d68;
+    --accent: #e8303a;
+    --accent2: #ff6b35;
+    --info: #3b82f6;
+    --info-bg: rgba(59,130,246,0.1);
+    --warn: #f59e0b;
+    --warn-bg: rgba(245,158,11,0.1);
+    --ok: #22c55e;
+    --ok-bg: rgba(34,197,94,0.1);
+    --gap: 12px;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', 'Fira Mono', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 2rem 1rem 4rem;
+  }
+
+  /* Header */
+  .header {
+    max-width: 860px;
+    margin: 0 auto 2rem;
+    border-bottom: 1px solid var(--border2);
+    padding-bottom: 1.25rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 4px; }
+  .header-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .header-title {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+  }
+  .header-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .header-logo {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Model selector */
+  .model-row {
+    max-width: 860px;
+    margin: 0 auto var(--gap);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .model-label { font-size: 11px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .model-btn {
+    padding: 5px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--text2);
+    transition: all .15s;
+    letter-spacing: 0.04em;
+  }
+  .model-btn:hover { background: var(--surface2); color: var(--text); }
+  .model-btn.sel {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Tabs */
+  .tabs {
+    max-width: 860px;
+    margin: 0 auto 1.25rem;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .tab {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-family: inherit;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text3);
+    transition: all .15s;
+    margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text2); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Main */
+  .main { max-width: 860px; margin: 0 auto; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: var(--gap);
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text2);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .badge-info { background: var(--info-bg); color: var(--info); }
+  .badge-warn { background: var(--warn-bg); color: var(--warn); }
+  .badge-ok { background: var(--ok-bg); color: var(--ok); }
+  .badge-red { background: rgba(232,48,58,0.12); color: var(--accent); }
+
+  /* Rows */
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row-label { font-size: 13px; color: var(--text2); flex: 1; }
+  .row-right { text-align: right; }
+  .row-val { font-size: 13px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .row-note { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+  /* Grid 2 */
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+  .metric {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: .875rem 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .metric-label { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric-val { font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+  .metric-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+  /* Callouts */
+  .tip {
+    border-left: 2px solid var(--info);
+    background: var(--info-bg);
+    padding: 10px 14px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-top: 12px;
+    font-size: 12px;
+    color: #93c5fd;
+    line-height: 1.6;
+  }
+  .warn-box {
+    border-left: 2px solid var(--warn);
+    background: var(--warn-bg);
+    padding: 10px 14px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-top: 12px;
+    font-size: 12px;
+    color: #fcd34d;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 600px) {
+    .header-title { font-size: 20px; }
+    .tab { padding: 6px 10px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="header-eyebrow">Automobilista 2 · v1.6.9.5</span>
+    <h1 class="header-title">Formula Edge</h1>
+    <p class="header-sub">Autódromo José Carlos Pace — Interlagos · Pista Seca</p>
+  </div>
+  <span class="header-logo">Setup Guide</span>
+</div>
+
+<div class="model-row">
+  <span class="model-label">Modelo:</span>
+  <button class="model-btn sel" onclick="selectModel('v12',this)">Model 1 — V12</button>
+  <button class="model-btn" onclick="selectModel('v10',this)">Model 2 — V10</button>
+  <button class="model-btn" onclick="selectModel('v8',this)">Model 3 — V8</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('aero',this)">Aerodinâmica</button>
+  <button class="tab" onclick="switchTab('susp',this)">Suspensão</button>
+  <button class="tab" onclick="switchTab('pneus',this)">Pneus</button>
+  <button class="tab" onclick="switchTab('freios',this)">Freios</button>
+  <button class="tab" onclick="switchTab('diff',this)">Diferencial</button>
+  <button class="tab" onclick="switchTab('trans',this)">Transmissão</button>
+  <button class="tab" onclick="switchTab('peso',this)">Peso</button>
+</div>
+
+<div class="main">
+
+  <!-- AERO -->
+  <div id="sec-aero" class="section active">
+    <div class="grid2">
+      <div class="metric">
+        <div class="metric-label">Asa dianteira</div>
+        <div class="metric-val" id="fw">6</div>
+        <div class="metric-sub">Médio-alto downforce</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Asa traseira</div>
+        <div class="metric-val" id="rw">8</div>
+        <div class="metric-sub">Tração + estabilidade</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Configuração aerodinâmica <span class="badge badge-ok">Interlagos</span></div>
+      <div class="row"><span class="row-label">Asa dianteira (front wing)</span><div class="row-right"><div class="row-val" id="fw-v">6 / 12</div><div class="row-note">Médio — S do Senna exige resposta</div></div></div>
+      <div class="row"><span class="row-label">Asa traseira (rear wing)</span><div class="row-right"><div class="row-val" id="rw-v">8 / 12</div><div class="row-note">Alta — tração nas subidas + Junção</div></div></div>
+      <div class="row"><span class="row-label">Inclinação da asa diant. (angle)</span><div class="row-right"><div class="row-val">+2°</div><div class="row-note">Equilíbrio neutro nas curvas rápidas</div></div></div>
+      <div class="row"><span class="row-label">Dive planes / flaps diant.</span><div class="row-right"><div class="row-val">Máx.</div><div class="row-note">Se disponível no modelo</div></div></div>
+    </div>
+    <div class="tip">Interlagos combina setor lento (Laranjinha, Mergulho) com setor rápido (S do Senna, Curva 1). Use downforce médio-alto — não vá para mínimo ou você perde tração saindo da Junção e perde estabilidade no S.</div>
+  </div>
+
+  <!-- SUSPENSÃO -->
+  <div id="sec-susp" class="section">
+    <div class="card">
+      <div class="card-title">Ride Height (altura em relação ao solo)</div>
+      <div class="row"><span class="row-label">Dianteiro (front ride height)</span><div class="row-right"><div class="row-val">22–24 mm</div><div class="row-note">Baixo — max downforce do difusor</div></div></div>
+      <div class="row"><span class="row-label">Traseiro (rear ride height)</span><div class="row-right"><div class="row-val">28–32 mm</div><div class="row-note">Rake positivo gera downforce traseiro</div></div></div>
+      <div class="row"><span class="row-label">Rake (diferença frente/traseiro)</span><div class="row-right"><div class="row-val">~8 mm</div><div class="row-note">Estabilidade sem bottoming</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Molas (Spring Rates)</div>
+      <div class="row"><span class="row-label">Mola dianteira</span><div class="row-right"><div class="row-val" id="sf-v">95–110 N/mm</div><div class="row-note">Rígida p/ controle aerodinâmico</div></div></div>
+      <div class="row"><span class="row-label">Mola traseira</span><div class="row-right"><div class="row-val" id="sr-v">80–95 N/mm</div><div class="row-note">Leve maciez relativa — tração</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Barras Estabilizadoras (ARBs)</div>
+      <div class="row"><span class="row-label">ARB dianteiro</span><div class="row-right"><div class="row-val" id="arb-f">8 / 15</div><div class="row-note">Médio — evita subesterçamento no S</div></div></div>
+      <div class="row"><span class="row-label">ARB traseiro</span><div class="row-right"><div class="row-val" id="arb-r">5 / 15</div><div class="row-note">Macio — tração / sobres. controlado</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Amortecedores — Compressão (Bump)</div>
+      <div class="row"><span class="row-label">Slow bump dianteiro</span><div class="row-right"><div class="row-val">8–10</div><div class="row-note">Transferência de peso controlada</div></div></div>
+      <div class="row"><span class="row-label">Slow bump traseiro</span><div class="row-right"><div class="row-val">6–8</div><div class="row-note">Suavidade na saída de curva</div></div></div>
+      <div class="row"><span class="row-label">Fast bump dianteiro</span><div class="row-right"><div class="row-val">4–6</div><div class="row-note">Absorção de meio-fio</div></div></div>
+      <div class="row"><span class="row-label">Fast bump traseiro</span><div class="row-right"><div class="row-val">3–5</div><div class="row-note">Estabilidade nos desnivelamentos</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Amortecedores — Extensão (Rebound)</div>
+      <div class="row"><span class="row-label">Slow rebound dianteiro</span><div class="row-right"><div class="row-val">10–12</div><div class="row-note">Controle de mergulho</div></div></div>
+      <div class="row"><span class="row-label">Slow rebound traseiro</span><div class="row-right"><div class="row-val">9–11</div><div class="row-note">Aceleração estável</div></div></div>
+      <div class="row"><span class="row-label">Fast rebound dianteiro</span><div class="row-right"><div class="row-val">5–7</div><div class="row-note">Recuperação rápida após toco</div></div></div>
+      <div class="row"><span class="row-label">Fast rebound traseiro</span><div class="row-right"><div class="row-val">4–6</div><div class="row-note">Retorno sobre o asfalto</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Heave Spring / 3rd Spring + Bumpstop</div>
+      <div class="row"><span class="row-label">Heave spring dianteira</span><div class="row-right"><div class="row-val">150–200 N/mm</div><div class="row-note">Resistência ao bottoming</div></div></div>
+      <div class="row"><span class="row-label">Bumpstop dianteiro</span><div class="row-right"><div class="row-val">8–10 mm</div><div class="row-note">Evita toque no solo</div></div></div>
+      <div class="row"><span class="row-label">Bumpstop traseiro</span><div class="row-right"><div class="row-val">6–8 mm</div><div class="row-note">Margem para rake dinâmico</div></div></div>
+    </div>
+    <div class="tip">Interlagos tem o "Mergulho" (curva 4) que é literalmente uma descida acentuada — amortecedores muito rígidos no fast bump vão tirar o carro do chão. Calibre slow/fast separadamente.</div>
+  </div>
+
+  <!-- PNEUS -->
+  <div id="sec-pneus" class="section">
+    <div class="card">
+      <div class="card-title">Cambagem (Camber)</div>
+      <div class="row"><span class="row-label">Camber dianteiro</span><div class="row-right"><div class="row-val">-2.8° a -3.2°</div><div class="row-note">Interior 7°C mais quente que exterior</div></div></div>
+      <div class="row"><span class="row-label">Camber traseiro</span><div class="row-right"><div class="row-val">-1.4° a -1.8°</div><div class="row-note">Interior 3–5°C mais quente</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Convergência (Toe)</div>
+      <div class="row"><span class="row-label">Toe dianteiro</span><div class="row-right"><div class="row-val">-0.10° (out)</div><div class="row-note">Resposta no S do Senna</div></div></div>
+      <div class="row"><span class="row-label">Toe traseiro</span><div class="row-right"><div class="row-val">+0.15° (in)</div><div class="row-note">Estabilidade nas retas</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Caster & Steering Lock</div>
+      <div class="row"><span class="row-label">Caster</span><div class="row-right"><div class="row-val">9–11°</div><div class="row-note">Estabilidade de alta velocidade</div></div></div>
+      <div class="row"><span class="row-label">Steering lock</span><div class="row-right"><div class="row-val">18–20°</div><div class="row-note">Laranjinha = curva fechada</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pressão dos Pneus (pressão fria)</div>
+      <div class="row"><span class="row-label">Pressão dianteira</span><div class="row-right"><div class="row-val" id="pf-v">22.5–23.5 psi</div><div class="row-note">Temperatura meia = entre in/out</div></div></div>
+      <div class="row"><span class="row-label">Pressão traseira</span><div class="row-right"><div class="row-val" id="pr-v">21.0–22.0 psi</div><div class="row-note">Pressão quente alvo: 24–26 psi</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Controle de Tração (TC)</div>
+      <div class="row"><span class="row-label">Traction control</span><div class="row-right"><div class="row-val" id="tc-v">N/A (sem TC)</div><div class="row-note">O mais baixo sem destruir pneus</div></div></div>
+    </div>
+    <div class="tip">Na temperatura dos pneus, verifique sempre os três pontos (interno, médio, externo). Se o meio estiver frio — aumente pressão. Se estiver quente demais — reduza. A temperatura guia a pressão, não o contrário.</div>
+  </div>
+
+  <!-- FREIOS -->
+  <div id="sec-freios" class="section">
+    <div class="card">
+      <div class="card-title">Distribuição e Pressão</div>
+      <div class="row"><span class="row-label">Brake bias (balanceamento)</span><div class="row-right"><div class="row-val">55–57% frente</div><div class="row-note">Freada da reta oposta + Laranjinha</div></div></div>
+      <div class="row"><span class="row-label">Pressão de freio (brake pressure)</span><div class="row-right"><div class="row-val">90–95%</div><div class="row-note">Alta para trajetória com ABS off</div></div></div>
+      <div class="row"><span class="row-label">ABS</span><div class="row-right"><div class="row-val">Desligado</div><div class="row-note">Fórmula puro — sem ABS</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Dutos de Freio (Brake Ducts)</div>
+      <div class="row"><span class="row-label">Duto dianteiro</span><div class="row-right"><div class="row-val">3 / 6</div><div class="row-note">Disco levemente amarelo = OK</div></div></div>
+      <div class="row"><span class="row-label">Duto traseiro</span><div class="row-right"><div class="row-val">2 / 6</div><div class="row-note">Menos carga — menos cooling</div></div></div>
+    </div>
+    <div class="tip">Na freada antes da Curva 1, o alvo é disco levemente amarelo no HUD — não vermelho. Verde antes do próximo ponto de frenagem. Abra o duto frontal se ficar vermelho frequentemente.</div>
+  </div>
+
+  <!-- DIFERENCIAL -->
+  <div id="sec-diff" class="section">
+    <div class="card">
+      <div class="card-title">Diferencial LSD <span class="badge badge-warn">crítico na Junção</span></div>
+      <div class="row"><span class="row-label">Preload (pré-carga)</span><div class="row-right"><div class="row-val" id="dl-v">80–100 Nm</div><div class="row-note">Estabilidade no apex</div></div></div>
+      <div class="row"><span class="row-label">Power ramp (aceleração)</span><div class="row-right"><div class="row-val">35–45°</div><div class="row-note">Tração saindo do Mergulho</div></div></div>
+      <div class="row"><span class="row-label">Coast ramp (desaceleração)</span><div class="row-right"><div class="row-val">65–75°</div><div class="row-note">Estabilidade de entrada</div></div></div>
+      <div class="row"><span class="row-label">Clutches</span><div class="row-right"><div class="row-val">3–4</div><div class="row-note">Travamento moderado pós-apex</div></div></div>
+    </div>
+    <div class="tip">A Junção (curva 11–12) é o ponto mais crítico do diferencial — é uma curva lenta de onde sai a aceleração para a reta oposta. Power ramp fechado demais trava o diff e derruba o traseiro no throttle.</div>
+  </div>
+
+  <!-- TRANSMISSÃO -->
+  <div id="sec-trans" class="section">
+    <div class="card">
+      <div class="card-title">Relações de Marcha — Interlagos <span class="badge badge-info" id="eng-badge">V12</span></div>
+      <div class="row"><span class="row-label">1ª marcha</span><div class="row-right"><div class="row-val" id="g1">~75 km/h</div><div class="row-note">Saída do pitlane / Laranjinha lenta</div></div></div>
+      <div class="row"><span class="row-label">2ª marcha</span><div class="row-right"><div class="row-val" id="g2">~115 km/h</div><div class="row-note">Saída curva Laranjinha</div></div></div>
+      <div class="row"><span class="row-label">3ª marcha</span><div class="row-right"><div class="row-val" id="g3">~160 km/h</div><div class="row-note">S do Senna (entrada)</div></div></div>
+      <div class="row"><span class="row-label">4ª marcha</span><div class="row-right"><div class="row-val" id="g4">~215 km/h</div><div class="row-note">S do Senna (saída) / Curva 3</div></div></div>
+      <div class="row"><span class="row-label">5ª marcha</span><div class="row-right"><div class="row-val" id="g5">~265 km/h</div><div class="row-note">Reta principal / Curva 1</div></div></div>
+      <div class="row"><span class="row-label">6ª marcha</span><div class="row-right"><div class="row-val" id="g6">~310+ km/h</div><div class="row-note">Final da reta oposta</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Motor e Radiador</div>
+      <div class="row"><span class="row-label">Abertura do radiador</span><div class="row-right"><div class="row-val">40–50%</div><div class="row-note">São Paulo: calor elevado</div></div></div>
+      <div class="row"><span class="row-label">Mapa de combustível (fuel map)</span><div class="row-right"><div class="row-val">Mapa 2</div><div class="row-note">Balanço potência / consumo</div></div></div>
+      <div class="row"><span class="row-label">Engine braking</span><div class="row-right"><div class="row-val">3–4</div><div class="row-note">Estabilidade de entrada sem over.</div></div></div>
+    </div>
+    <div class="tip">O V10 (Model 2) é o mais nervoso nas entregas de potência — use mapa de combustível 3 se estiver tendo dificuldade de tração na Junção e suba para 2 quando estiver confortável.</div>
+  </div>
+
+  <!-- PESO -->
+  <div id="sec-peso" class="section">
+    <div class="card">
+      <div class="card-title">Distribuição de Peso</div>
+      <div class="row"><span class="row-label">Bias lateral (lateral weight bias)</span><div class="row-right"><div class="row-val">0 (central)</div><div class="row-note">Interlagos vira para ambos os lados</div></div></div>
+      <div class="row"><span class="row-label">Bias longitudinal</span><div class="row-right"><div class="row-val">44–46% frente</div><div class="row-note">Leve transferência p/ traseiro</div></div></div>
+      <div class="row"><span class="row-label">Weight jacker (esquerdo)</span><div class="row-right"><div class="row-val">+10–20 kg</div><div class="row-note">Compensa assimetria da pista</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Combustível</div>
+      <div class="row"><span class="row-label">Classificação (qualy)</span><div class="row-right"><div class="row-val">10–12 L</div><div class="row-note">Mínimo para 2–3 voltas rápidas</div></div></div>
+      <div class="row"><span class="row-label">Corrida sprint</span><div class="row-right"><div class="row-val">45–55 L</div><div class="row-note">~3 km/L estimado</div></div></div>
+      <div class="row"><span class="row-label">Corrida endurance</span><div class="row-right"><div class="row-val">Cheio</div><div class="row-note">Verifique estratégia de pit</div></div></div>
+    </div>
+    <div class="warn-box">Interlagos fica a ~798 m de altitude — o motor perde ~3–5% de potência. Abra o radiador um pouco mais e considere usar o mapa de combustível mais agressivo para compensar.</div>
+  </div>
+
+</div>
+
+<script>
+const modelData = {
+  v12: { fw:'6', rw:'8', fwv:'6 / 12', rwv:'8 / 12', sfv:'95–110 N/mm', srv:'80–95 N/mm', arbf:'8 / 15', arbr:'5 / 15', pfv:'22.5–23.5 psi', prv:'21.0–22.0 psi', tcv:'N/A (sem TC)', dlv:'80–100 Nm', badge:'V12', g1:'~75 km/h', g2:'~115 km/h', g3:'~160 km/h', g4:'~215 km/h', g5:'~265 km/h', g6:'~310+ km/h' },
+  v10: { fw:'7', rw:'9', fwv:'7 / 12', rwv:'9 / 12', sfv:'100–115 N/mm', srv:'85–100 N/mm', arbf:'9 / 15', arbr:'6 / 15', pfv:'22.0–23.0 psi', prv:'20.5–21.5 psi', tcv:'2–3', dlv:'90–110 Nm', badge:'V10', g1:'~72 km/h', g2:'~110 km/h', g3:'~155 km/h', g4:'~205 km/h', g5:'~255 km/h', g6:'~300+ km/h' },
+  v8:  { fw:'6', rw:'8', fwv:'6 / 12', rwv:'8 / 12', sfv:'90–105 N/mm', srv:'78–90 N/mm', arbf:'7 / 15', arbr:'5 / 15', pfv:'22.0–23.0 psi', prv:'21.0–22.0 psi', tcv:'2–3', dlv:'75–95 Nm', badge:'V8', g1:'~70 km/h', g2:'~108 km/h', g3:'~150 km/h', g4:'~198 km/h', g5:'~245 km/h', g6:'~285 km/h' }
+};
+
+function selectModel(m, el) {
+  document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  const d = modelData[m];
+  document.getElementById('fw').textContent = d.fw;
+  document.getElementById('rw').textContent = d.rw;
+  document.getElementById('fw-v').textContent = d.fwv;
+  document.getElementById('rw-v').textContent = d.rwv;
+  document.getElementById('sf-v').textContent = d.sfv;
+  document.getElementById('sr-v').textContent = d.srv;
+  document.getElementById('arb-f').textContent = d.arbf;
+  document.getElementById('arb-r').textContent = d.arbr;
+  document.getElementById('pf-v').textContent = d.pfv;
+  document.getElementById('pr-v').textContent = d.prv;
+  document.getElementById('tc-v').textContent = d.tcv;
+  document.getElementById('dl-v').textContent = d.dlv;
+  document.getElementById('eng-badge').textContent = d.badge;
+  document.getElementById('g1').textContent = d.g1;
+  document.getElementById('g2').textContent = d.g2;
+  document.getElementById('g3').textContent = d.g3;
+  document.getElementById('g4').textContent = d.g4;
+  document.getElementById('g5').textContent = d.g5;
+  document.getElementById('g6').textContent = d.g6;
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sec-' + id).classList.add('active');
+}
+</script>
+</body>
+</html>
