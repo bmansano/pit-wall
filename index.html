@@ -976,6 +976,17 @@ function App() {
   });
   var customMaps = _cmaps[0]; var setCustomMaps = _cmaps[1];
   var _uploading = useState(null); var uploadingTrack = _uploading[0]; var setUploadingTrack = _uploading[1];
+  // Custom MOD data: { [gameKey]: { tracks: string[], categories: { [catKey]: string[] }, customCategories: { [catKey]: string } } }
+  var _customMods = useState(function() {
+    try { var v = localStorage.getItem("pitwall_custom_mods"); return v ? JSON.parse(v) : {}; } catch(e) { return {}; }
+  });
+  var customMods = _customMods[0]; var setCustomMods = _customMods[1];
+  // Admin panel state
+  var _adminGame = useState(""); var adminGame = _adminGame[0]; var setAdminGame = _adminGame[1];
+  var _adminSection = useState("categories"); var adminSection = _adminSection[0]; var setAdminSection = _adminSection[1];
+  var _adminCat = useState(""); var adminCat = _adminCat[0]; var setAdminCat = _adminCat[1];
+  var _adminInputs = useState({}); var adminInputs = _adminInputs[0]; var setAdminInputs = _adminInputs[1];
+  var _adminEditing = useState(null); var adminEditing = _adminEditing[0]; var setAdminEditing = _adminEditing[1];
   // Telemetry
   var _telem = useState(null); var telemetry = _telem[0]; var setTelemetry = _telem[1];
   var _telemParsing = useState(false); var telemParsing = _telemParsing[0]; var setTelemParsing = _telemParsing[1];
@@ -1201,7 +1212,7 @@ function App() {
     var condVal = condition || fb.condition || "Dry";
     var g = GAMES[gKey];
     var s = {
-      id: Date.now().toString(),
+      id: activeSetupSrc ? activeSetupSrc.id : Date.now().toString(),
       game: g ? g.name : (gKey || fb.game || ""),
       gameKey: gKey,
       category: (g && g.categories[catKey]) ? g.categories[catKey].name : (catKey || fb.category || ""),
@@ -1216,7 +1227,10 @@ function App() {
       notes: "",
       manualEdits: Object.assign({}, manualEdits),
     };
-    var n = [s].concat(savedSetups);
+    var existing = savedSetups.some(function(x) { return x.id === s.id; });
+    var n = existing
+      ? savedSetups.map(function(x) { return x.id === s.id ? s : x; })
+      : [s].concat(savedSetups);
     setSavedSetups(n);
     sbUpsertSetup(s);
     setToast("Setup saved!");
@@ -1255,6 +1269,103 @@ function App() {
       try { localStorage.setItem("pitwall_custom_maps", JSON.stringify(n)); } catch(e) {}
       return n;
     });
+  }
+
+  function saveCustomMods(mods) {
+    try { localStorage.setItem("pitwall_custom_mods", JSON.stringify(mods)); } catch(e) {}
+    setCustomMods(mods);
+  }
+
+  function getModBase(mods, gameKey) {
+    var n = JSON.parse(JSON.stringify(mods));
+    if (!n[gameKey]) n[gameKey] = { tracks: [], categories: {}, customCategories: {} };
+    if (!n[gameKey].tracks) n[gameKey].tracks = [];
+    if (!n[gameKey].categories) n[gameKey].categories = {};
+    if (!n[gameKey].customCategories) n[gameKey].customCategories = {};
+    return n;
+  }
+
+  function addModCategory(gameKey, catName) {
+    var name = catName.trim(); if (!name || !gameKey) return;
+    var n = getModBase(customMods, gameKey);
+    var key = "modcat_" + Date.now();
+    n[gameKey].customCategories[key] = name;
+    n[gameKey].categories[key] = [];
+    saveCustomMods(n);
+    setAdminInputs(function(p) { return Object.assign({}, p, { newCat: "" }); });
+  }
+
+  function removeModCategory(gameKey, catKey) {
+    var n = getModBase(customMods, gameKey);
+    delete n[gameKey].customCategories[catKey];
+    delete n[gameKey].categories[catKey];
+    saveCustomMods(n);
+    if (adminCat === catKey) setAdminCat("");
+    if (category === catKey) { setCategory(""); setSelectedCars([]); }
+  }
+
+  function renameModCategory(gameKey, catKey, newName) {
+    var name = newName.trim(); if (!name) return;
+    var n = getModBase(customMods, gameKey);
+    n[gameKey].customCategories[catKey] = name;
+    saveCustomMods(n);
+    setAdminEditing(null);
+  }
+
+  function addModCar(gameKey, catKey, carName) {
+    var name = carName.trim(); if (!name || !gameKey || !catKey) return;
+    var n = getModBase(customMods, gameKey);
+    if (!n[gameKey].categories[catKey]) n[gameKey].categories[catKey] = [];
+    if (!n[gameKey].categories[catKey].includes(name)) {
+      n[gameKey].categories[catKey].push(name);
+      saveCustomMods(n);
+    }
+    setAdminInputs(function(p) { return Object.assign({}, p, { newCar: "" }); });
+  }
+
+  function removeModCar(gameKey, catKey, carName) {
+    var n = getModBase(customMods, gameKey);
+    if (n[gameKey].categories[catKey]) {
+      n[gameKey].categories[catKey] = n[gameKey].categories[catKey].filter(function(c) { return c !== carName; });
+      saveCustomMods(n);
+    }
+    if (selectedCars.includes(carName)) setSelectedCars(function(p) { return p.filter(function(c) { return c !== carName; }); });
+  }
+
+  function renameModCar(gameKey, catKey, oldName, newName) {
+    var name = newName.trim(); if (!name) return;
+    var n = getModBase(customMods, gameKey);
+    if (n[gameKey].categories[catKey]) {
+      n[gameKey].categories[catKey] = n[gameKey].categories[catKey].map(function(c) { return c === oldName ? name : c; });
+      saveCustomMods(n);
+    }
+    setAdminEditing(null);
+  }
+
+  function addModTrack(gameKey, trackName) {
+    var name = trackName.trim(); if (!name || !gameKey) return;
+    var n = getModBase(customMods, gameKey);
+    if (!n[gameKey].tracks.includes(name)) {
+      n[gameKey].tracks.push(name);
+      saveCustomMods(n);
+    }
+    setAdminInputs(function(p) { return Object.assign({}, p, { newTrack: "" }); });
+  }
+
+  function removeModTrack(gameKey, trackName) {
+    var n = getModBase(customMods, gameKey);
+    n[gameKey].tracks = n[gameKey].tracks.filter(function(t) { return t !== trackName; });
+    saveCustomMods(n);
+    if (track === trackName) setTrack("");
+  }
+
+  function renameModTrack(gameKey, oldName, newName) {
+    var name = newName.trim(); if (!name) return;
+    var n = getModBase(customMods, gameKey);
+    n[gameKey].tracks = n[gameKey].tracks.map(function(t) { return t === oldName ? name : t; });
+    saveCustomMods(n);
+    if (track === oldName) setTrack(name);
+    setAdminEditing(null);
   }
 
   function handleMapUpload(trackName, file) {
@@ -1345,8 +1456,12 @@ function App() {
 
   var cg = GAMES[game] || null;
   var cc = (cg && cg.categories) ? cg.categories[category] || null : null;
-  var allCars = cc ? cc.cars : [];
-  var trks = cg ? cg.tracks.slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
+  var modCarsForCat = (customMods[game] && customMods[game].categories && customMods[game].categories[category]) ? customMods[game].categories[category] : [];
+  var modTracksForGame = (customMods[game] && customMods[game].tracks) ? customMods[game].tracks : [];
+  var customCategoriesForGame = (customMods[game] && customMods[game].customCategories) ? customMods[game].customCategories : {};
+  var allCars = (cc ? cc.cars : []).concat(modCarsForCat);
+  var trks = cg ? cg.tracks.concat(modTracksForGame).slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
+  var isAdmin = user && user.email === "bmansano@gmail.com";
   var fTrks = trks.filter(function(t) { return t.toLowerCase().includes(trackFilter.toLowerCase()); });
   var fCars = allCars.slice().sort(function(a, b) { return a.localeCompare(b); }).filter(function(c) { return c.toLowerCase().includes(carFilter.toLowerCase()); });
 
@@ -1925,6 +2040,7 @@ function App() {
       { key: "chat", label: "ENGINEER", icon: "◈" },
       { key: "history", label: isMobile ? "SETUPS" : "SAVED SETUPS", icon: "☰" },
     ];
+    if (isAdmin) tabs.push({ key: "admin", label: "ADMIN", icon: "⚑" });
     return (
       <div style={{ height: isMobile ? 48 : 52, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: isMobile ? "0 12px" : "0 20px", gap: 0, position: "relative", zIndex: 20 }}>
         {/* Logo */}
@@ -1947,6 +2063,7 @@ function App() {
             <button key={tab.key} className="pw-header-nav" onClick={function() {
               if (tab.key === "config") { setStep("config"); }
               else if (tab.key === "chat") { setStep("chat"); }
+              else if (tab.key === "admin") { setStep("admin"); if (!adminGame && Object.keys(GAMES)[0]) setAdminGame(Object.keys(GAMES)[0]); }
               else { setStep("history"); setSelectedSetup(null); if (savedSetups.length > 0) setHistoryGame(savedSetups[0].game); }
             }} style={{
               height: isMobile ? 48 : 52,
@@ -2078,15 +2195,28 @@ function App() {
             <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
               {!game
                 ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>Select a simulator<br/>above</div>
-                : Object.entries(cg.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
-                    var k = e2[0]; var cat = e2[1]; var sel = category === k;
-                    return (
-                      <button key={k} onClick={function() { setCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
-                        <span>{cat.name}</span>
-                        <span style={{ fontSize: 12, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length}</span>
-                      </button>
-                    );
-                  })
+                : (function() {
+                    var builtIn = Object.entries(cg.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
+                      var k = e2[0]; var cat = e2[1]; var sel = category === k;
+                      return (
+                        <button key={k} onClick={function() { setCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
+                          <span>{cat.name}</span>
+                          <span style={{ fontSize: 12, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length + ((customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k].length : 0)}</span>
+                        </button>
+                      );
+                    });
+                    var custom = Object.entries(customCategoriesForGame).map(function(e2) {
+                      var k = e2[0]; var name = e2[1]; var sel = category === k;
+                      var cars = (customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k] : [];
+                      return (
+                        <button key={k} onClick={function() { setCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? "rgba(168,85,247,0.12)" : "transparent", border: "none", borderLeft: "2px solid " + (sel ? "#c084fc" : "transparent"), color: sel ? "#c084fc" : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
+                          <span>{name}</span>
+                          <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", marginLeft: 6 }}>MOD {cars.length}</span>
+                        </button>
+                      );
+                    });
+                    return builtIn.concat(custom);
+                  })()
               }
             </div>
           </div>
@@ -2106,14 +2236,24 @@ function App() {
                 ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>Select a category</div>
                 : fCars.map(function(car) {
                     var sel = selectedCars.includes(car);
+                    var isMod = modCarsForCat.includes(car);
                     return (
-                      <button key={car} onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 10px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 14, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
-                        <span style={{ width: 16, height: 16, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
-                        {car}
-                      </button>
+                      <div key={car} style={{ display: "flex", alignItems: "center", marginBottom: 1 }}>
+                        <button onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, textAlign: "left", padding: "10px 10px 10px 14px", background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 14, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                          <span style={{ width: 16, height: 16, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
+                          {car}
+                          {isMod && <span style={{ marginLeft: "auto", fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif" }}>MOD</span>}
+                        </button>
+                        {isMod && <button onClick={function() { removeModCar(game, category, car); if (selectedCars.includes(car)) toggleCar(car); }} style={{ padding: "0 10px", background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 16, lineHeight: 1, height: "100%", flexShrink: 0 }} title="Remove MOD car">×</button>}
+                      </div>
                     );
                   })
               }
+              {isAdmin && category && (
+                <div style={{ padding: "8px 8px 4px", borderTop: "1px solid " + C.bd, marginTop: 4, display: "flex", justifyContent: "center" }}>
+                  <button onClick={function() { setStep("admin"); setAdminGame(game); setAdminSection("cars"); setAdminCat(category); if (!adminGame) setAdminGame(game); }} style={{ fontSize: 10, letterSpacing: 1, padding: "5px 12px", background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.35)", borderRadius: 3, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", cursor: "pointer" }}>⚑ MANAGE MODS</button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2142,10 +2282,15 @@ function App() {
                           <div style={{ padding: "10px 14px 3px", fontSize: 11, letterSpacing: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", textTransform: "uppercase", opacity: 0.7, borderBottom: "1px solid " + C.bd, marginBottom: 2 }}>{country}</div>
                           {grouped[country].map(function(t) {
                             var sel = track === t;
+                            var isMod = modTracksForGame.includes(t);
                             return (
-                              <button key={t} onClick={function() { setTrack(t); if (isMobile && mobileConfigPanel === 2) { /* stay on track panel */ } }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
-                                {t}
-                              </button>
+                              <div key={t} style={{ display: "flex", alignItems: "center" }}>
+                                <button onClick={function() { setTrack(t); }} style={{ flex: 1, textAlign: "left", padding: "10px 10px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                                  {t}
+                                  {isMod && <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif" }}>MOD</span>}
+                                </button>
+                                {isMod && <button onClick={function() { if (track === t) setTrack(""); removeModTrack(game, t); }} style={{ padding: "0 10px", background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 16, lineHeight: 1, flexShrink: 0 }} title="Remove MOD track">×</button>}
+                              </div>
                             );
                           })}
                         </div>
@@ -2153,6 +2298,11 @@ function App() {
                     });
                   })()
               }
+              {isAdmin && game && (
+                <div style={{ padding: "8px 8px 4px", borderTop: "1px solid " + C.bd, marginTop: 4, display: "flex", justifyContent: "center" }}>
+                  <button onClick={function() { setStep("admin"); setAdminGame(game); setAdminSection("tracks"); }} style={{ fontSize: 10, letterSpacing: 1, padding: "5px 12px", background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.35)", borderRadius: 3, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", cursor: "pointer" }}>⚑ MANAGE MODS</button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2208,6 +2358,230 @@ function App() {
         </div>
 
         <Toast /><DiscardModal />
+      </div>
+    );
+  }
+
+  // ── ADMIN PANEL ─────────────────────────────────────────────────────────────
+  if (step === "admin" && isAdmin) {
+    var ag = GAMES[adminGame] || null;
+    var agMods = (customMods[adminGame] || { tracks: [], categories: {}, customCategories: {} });
+    var agCustomCats = agMods.customCategories || {};
+    var agModTracks = agMods.tracks || [];
+
+    // Merge all categories for the selected game: built-in + custom
+    var allCatsForAdmin = [];
+    if (ag) {
+      Object.entries(ag.categories).forEach(function(e2) {
+        allCatsForAdmin.push({ key: e2[0], name: e2[1].name, builtIn: true, cars: e2[1].cars });
+      });
+    }
+    Object.entries(agCustomCats).forEach(function(e2) {
+      var cars = (agMods.categories && agMods.categories[e2[0]]) ? agMods.categories[e2[0]] : [];
+      allCatsForAdmin.push({ key: e2[0], name: e2[1], builtIn: false, cars: cars });
+    });
+    allCatsForAdmin.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+    // Cars for currently selected admin category
+    var adminCatObj = allCatsForAdmin.find(function(c) { return c.key === adminCat; });
+    var builtInCarsForAdminCat = (adminCatObj && adminCatObj.builtIn && ag) ? (ag.categories[adminCat] ? ag.categories[adminCat].cars : []) : [];
+    var modCarsForAdminCat = (agMods.categories && agMods.categories[adminCat]) ? agMods.categories[adminCat] : [];
+
+    var MOD_PURPLE = "#c084fc";
+    var MOD_BG = "rgba(168,85,247,0.12)";
+    var MOD_BD = "rgba(168,85,247,0.4)";
+
+    function AdminInput(props) {
+      var val = adminInputs[props.k] !== undefined ? adminInputs[props.k] : "";
+      return (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <input value={val} onChange={function(e) { setAdminInputs(function(p) { var n = Object.assign({}, p); n[props.k] = e.target.value; return n; }); }}
+            onKeyDown={function(e) { if (e.key === "Enter" && val.trim()) props.onAdd(val); }}
+            placeholder={props.placeholder}
+            style={{ flex: 1, padding: "7px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
+          <button onClick={function() { if (val.trim()) props.onAdd(val); }} disabled={!val.trim()}
+            style={{ padding: "7px 14px", background: val.trim() ? MOD_BG : "transparent", border: "1px solid " + (val.trim() ? MOD_BD : C.bd), borderRadius: 3, color: val.trim() ? MOD_PURPLE : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: val.trim() ? "pointer" : "not-allowed" }}>ADD</button>
+        </div>
+      );
+    }
+
+    function ModBadge() {
+      return <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>MOD</span>;
+    }
+
+    function EditInline(props) {
+      var editKey = props.type + ":" + props.id;
+      var editing = adminEditing === editKey;
+      var _ev = useState(props.value); var editVal = _ev[0]; var setEditVal = _ev[1];
+      if (editing) {
+        return (
+          <div style={{ display: "flex", gap: 4, flex: 1 }}>
+            <input value={editVal} onChange={function(e) { setEditVal(e.target.value); }} autoFocus onKeyDown={function(e) { if (e.key === "Enter") props.onSave(editVal); if (e.key === "Escape") setAdminEditing(null); }}
+              style={{ flex: 1, padding: "2px 6px", background: C.bg, border: "1px solid " + MOD_BD, borderRadius: 2, color: C.tx, fontSize: 13 }} />
+            <button onClick={function() { props.onSave(editVal); }} style={{ padding: "2px 8px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>SAVE</button>
+            <button onClick={function() { setAdminEditing(null); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>✕</button>
+          </div>
+        );
+      }
+      return (
+        <span style={{ flex: 1, fontSize: 14, color: MOD_PURPLE }}>{props.value}
+          <button onClick={function() { setAdminEditing(editKey); setEditVal(props.value); }} style={{ marginLeft: 8, background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 11 }} title="Rename">✎</button>
+        </span>
+      );
+    }
+
+    return (
+      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <Header />
+
+        {/* Game tabs */}
+        <div style={{ flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 16px", gap: 4, overflowX: "auto" }}>
+          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginRight: 8, flexShrink: 0 }}>SIMULATOR</span>
+          {Object.entries(GAMES).map(function(e2) {
+            var k = e2[0]; var g = e2[1]; var act = adminGame === k;
+            return <button key={k} onClick={function() { setAdminGame(k); setAdminCat(""); setAdminEditing(null); }}
+              style={{ padding: "12px 16px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? MOD_PURPLE : "transparent"), color: act ? MOD_PURPLE : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1, cursor: "pointer", flexShrink: 0, marginBottom: -1 }}>{g.short || g.name}</button>;
+          })}
+        </div>
+
+        {/* Section tabs */}
+        <div style={{ flexShrink: 0, background: C.sfc, borderBottom: "1px solid " + C.bd, display: "flex", padding: "0 20px", gap: 0 }}>
+          {[["categories","CATEGORIES"],["cars","CARS"],["tracks","TRACKS"]].map(function(t) {
+            var act = adminSection === t[0];
+            return <button key={t[0]} onClick={function() { setAdminSection(t[0]); setAdminEditing(null); }}
+              style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1.5, cursor: "pointer", marginBottom: -1 }}>{t[1]}</button>;
+          })}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflow: "auto", padding: "24px" }}>
+          {!adminGame && <div style={{ color: C.td, fontSize: 13, textAlign: "center", marginTop: 40 }}>Select a simulator above</div>}
+
+          {/* ── CATEGORIES ── */}
+          {adminGame && adminSection === "categories" && (
+            <div style={{ maxWidth: 640 }}>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 12 }}>BUILT-IN CATEGORIES — {ag ? Object.keys(ag.categories).length : 0} total (read-only)</div>
+              {ag && Object.entries(ag.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
+                var k = e2[0]; var cat = e2[1];
+                var extraCars = (agMods.categories && agMods.categories[k]) ? agMods.categories[k].length : 0;
+                return (
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 1, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                    <span style={{ flex: 1, fontSize: 14, color: C.ts }}>{cat.name}</span>
+                    <span style={{ fontSize: 11, color: C.td }}>{cat.cars.length} cars{extraCars > 0 ? " + " + extraCars + " MOD" : ""}</span>
+                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>ADD CARS</button>
+                  </div>
+                );
+              })}
+
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, margin: "20px 0 12px" }}>MOD CATEGORIES — {Object.keys(agCustomCats).length} added</div>
+              {Object.keys(agCustomCats).length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 12 }}>No custom categories yet.</div>}
+              {Object.entries(agCustomCats).map(function(e2) {
+                var k = e2[0]; var name = e2[1];
+                var cars = (agMods.categories && agMods.categories[k]) ? agMods.categories[k] : [];
+                return (
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
+                    <ModBadge />
+                    <EditInline type="cat" id={k} value={name} onSave={function(v) { renameModCategory(adminGame, k, v); }} />
+                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cars.length} cars</span>
+                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>MANAGE</button>
+                    <button onClick={function() { if (confirm("Remove category \"" + name + "\" and all its cars?")) removeModCategory(adminGame, k); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                  </div>
+                );
+              })}
+
+              <div style={{ marginTop: 16, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>NEW MOD CATEGORY</div>
+                <AdminInput k="newCat" placeholder="Category name (e.g. GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} />
+              </div>
+            </div>
+          )}
+
+          {/* ── CARS ── */}
+          {adminGame && adminSection === "cars" && (
+            <div style={{ maxWidth: 640 }}>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 12 }}>SELECT CATEGORY</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
+                {allCatsForAdmin.map(function(cat) {
+                  var act = adminCat === cat.key;
+                  return <button key={cat.key} onClick={function() { setAdminCat(cat.key); setAdminEditing(null); }}
+                    style={{ padding: "6px 14px", background: act ? (cat.builtIn ? C.acg : MOD_BG) : "transparent", border: "1px solid " + (act ? (cat.builtIn ? C.ac : MOD_PURPLE) : C.bd), borderRadius: 3, color: act ? (cat.builtIn ? C.ac : MOD_PURPLE) : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, cursor: "pointer" }}>
+                    {cat.name}{!cat.builtIn ? " ★" : ""}
+                  </button>;
+                })}
+              </div>
+
+              {!adminCat && <div style={{ color: C.td, fontSize: 13 }}>Select a category above to manage its cars.</div>}
+
+              {adminCat && adminCatObj && (
+                <div>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 10 }}>
+                    {adminCatObj.builtIn ? "BUILT-IN CARS" : "MOD CARS"} — {adminCatObj.name}
+                  </div>
+
+                  {adminCatObj.builtIn && builtInCarsForAdminCat.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>BUILT-IN (read-only)</div>
+                      {builtInCarsForAdminCat.sort().map(function(car) {
+                        return <div key={car} style={{ padding: "8px 14px", marginBottom: 1, background: C.sf, border: "1px solid " + C.bd, borderRadius: 2, fontSize: 13, color: C.ts }}>{car}</div>;
+                      })}
+                    </div>
+                  )}
+
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 6, marginTop: adminCatObj.builtIn ? 0 : 0 }}>MOD CARS — {modCarsForAdminCat.length} added</div>
+                  {modCarsForAdminCat.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>No MOD cars yet.</div>}
+                  {modCarsForAdminCat.map(function(car) {
+                    return (
+                      <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
+                        <ModBadge />
+                        <EditInline type={"car:" + adminCat} id={car} value={car} onSave={function(v) { renameModCar(adminGame, adminCat, car, v); }} />
+                        <button onClick={function() { removeModCar(adminGame, adminCat, car); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD CAR</div>
+                    <AdminInput k="newCar" placeholder="Car name (e.g. Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── TRACKS ── */}
+          {adminGame && adminSection === "tracks" && (
+            <div style={{ maxWidth: 640 }}>
+              {ag && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>BUILT-IN TRACKS — {ag.tracks.length} (read-only)</div>
+                  <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid " + C.bd, borderRadius: 3, background: C.sf }}>
+                    {ag.tracks.slice().sort().map(function(t) {
+                      return <div key={t} style={{ padding: "6px 14px", borderBottom: "1px solid " + C.bd, fontSize: 13, color: C.ts }}>{t}</div>;
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 8 }}>MOD TRACKS — {agModTracks.length} added</div>
+              {agModTracks.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>No MOD tracks yet.</div>}
+              {agModTracks.map(function(t) {
+                return (
+                  <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
+                    <ModBadge />
+                    <EditInline type="track" id={t} value={t} onSave={function(v) { renameModTrack(adminGame, t, v); }} />
+                    <button onClick={function() { removeModTrack(adminGame, t); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                  </div>
+                );
+              })}
+
+              <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD TRACK</div>
+                <AdminInput k="newTrack" placeholder="Track name (e.g. Brasília Autódromo)" onAdd={function(v) { addModTrack(adminGame, v); }} />
+              </div>
+            </div>
+          )}
+        </div>
+        <Toast />
       </div>
     );
   }
@@ -2323,7 +2697,7 @@ function App() {
                   return (
                     <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
                       {u
-                        ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
+                        ? <div style={{ padding: "9px 14px", background: "rgba(56,189,248,0.10)", borderLeft: "3px solid #38bdf8", color: "#7dd3fc", fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
                         : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAst, { msgIdx: i, edits: selectedSetup.manualEdits || {} })}</div>
                       }
                     </div>
@@ -2635,7 +3009,7 @@ function App() {
               return (
                 <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
                   {u
-                    ? <div style={{ padding: "9px 14px", background: C.acg, borderLeft: "3px solid " + C.ac, color: C.acb, fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
+                    ? <div style={{ padding: "9px 14px", background: "rgba(56,189,248,0.10)", borderLeft: "3px solid #38bdf8", color: "#7dd3fc", fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
                     : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAssistant, {
                         msgIdx: i,
                         edits: manualEdits,
@@ -2660,7 +3034,7 @@ function App() {
           {/* Input */}
           <div style={{ padding: isMobile ? "10px 14px" : "14px 22px", borderTop: "1px solid " + C.bd, background: C.sf, flexShrink: 0 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-              <textarea value={input} onChange={function(e) { setInput(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!loading) sendMsg(input); } }} placeholder="Descreva o comportamento do carro ou peça ajustes..." rows={isMobile ? 2 : 2}
+              <textarea value={input} onChange={function(e) { setInput(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!loading) sendMsg(input); } }} placeholder="Describe the car's behavior or request adjustments..." rows={isMobile ? 2 : 2}
                 style={{ flex: 1, resize: "none", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: isMobile ? 15 : 14, lineHeight: 1.6 }} />
               <button onClick={function() { if (!loading) sendMsg(input); }} disabled={loading || !input.trim()} style={{ padding: "11px 20px", background: (loading || !input.trim()) ? C.bd : C.ac, border: "none", borderRadius: 4, color: (loading || !input.trim()) ? C.td : "#000", fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 1, cursor: (loading || !input.trim()) ? "not-allowed" : "pointer", textTransform: "uppercase", height: 50, flexShrink: 0 }}>
                 {isMobile ? "▶" : "SEND"}
