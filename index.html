@@ -977,9 +977,8 @@ function App() {
   var customMaps = _cmaps[0]; var setCustomMaps = _cmaps[1];
   var _uploading = useState(null); var uploadingTrack = _uploading[0]; var setUploadingTrack = _uploading[1];
   // Custom MOD data: { [gameKey]: { tracks: string[], categories: { [catKey]: string[] }, customCategories: { [catKey]: string } } }
-  var _customMods = useState(function() {
-    try { var v = localStorage.getItem("pitwall_custom_mods"); return v ? JSON.parse(v) : {}; } catch(e) { return {}; }
-  });
+  // Loaded from Supabase on init (global, shared across all users)
+  var _customMods = useState({});
   var customMods = _customMods[0]; var setCustomMods = _customMods[1];
   // Admin panel state
   var _adminGame = useState(""); var adminGame = _adminGame[0]; var setAdminGame = _adminGame[1];
@@ -1016,7 +1015,7 @@ function App() {
 
   var hasSession = messages.length > 0;
 
-  useEffect(function() { if (user) loadSetups(); }, [user]);
+  useEffect(function() { if (user) { loadSetups(); loadMods(); } }, [user]);
   useEffect(function() { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
   useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
@@ -1032,11 +1031,22 @@ function App() {
 
   function loadSetups() {
     if (!window.sb || !user) return;
-    window.sb.from("setups").select("*").order("ts", { ascending: false })
+    window.sb.from("setups").select("*").neq("id", "__mods__").order("ts", { ascending: false })
       .then(function(res) {
         if (res.error) { console.error("loadSetups:", res.error.message); return; }
-        var rows = (res.data || []).map(function(r) { return r.data; });
+        var rows = (res.data || []).map(function(r) { return r.data; }).filter(Boolean);
         setSavedSetups(rows);
+      });
+  }
+
+  function loadMods() {
+    if (!window.sb) return;
+    window.sb.from("setups").select("data").eq("id", "__mods__")
+      .then(function(res) {
+        if (res.error) { console.error("loadMods:", res.error.message); return; }
+        if (res.data && res.data.length > 0 && res.data[0].data) {
+          setCustomMods(res.data[0].data);
+        }
       });
   }
 
@@ -1279,8 +1289,10 @@ function App() {
   }
 
   function saveCustomMods(mods) {
-    try { localStorage.setItem("pitwall_custom_mods", JSON.stringify(mods)); } catch(e) {}
     setCustomMods(mods);
+    if (!window.sb) return;
+    window.sb.from("setups").upsert({ id: "__mods__", user_id: null, ts: new Date().toISOString(), data: mods }, { onConflict: "id" })
+      .then(function(res) { if (res.error) console.error("saveCustomMods:", res.error.message); });
   }
 
   function getModBase(mods, gameKey) {
@@ -1295,6 +1307,9 @@ function App() {
   function addModCategory(gameKey, catName) {
     var name = catName.trim(); if (!name || !gameKey) return;
     var n = getModBase(customMods, gameKey);
+    // Check for duplicate name
+    var exists = Object.values(n[gameKey].customCategories).some(function(v) { return v.toLowerCase() === name.toLowerCase(); });
+    if (exists) return;
     var key = "modcat_" + Date.now();
     n[gameKey].customCategories[key] = name;
     n[gameKey].categories[key] = [];
@@ -1325,6 +1340,7 @@ function App() {
     if (!n[gameKey].categories[catKey]) n[gameKey].categories[catKey] = [];
     if (!n[gameKey].categories[catKey].includes(name)) {
       n[gameKey].categories[catKey].push(name);
+      n[gameKey].categories[catKey].sort(function(a, b) { return a.localeCompare(b); });
       saveCustomMods(n);
     }
     setAdminInputs(function(p) { return Object.assign({}, p, { newCar: "" }); });
@@ -1354,6 +1370,7 @@ function App() {
     var n = getModBase(customMods, gameKey);
     if (!n[gameKey].tracks.includes(name)) {
       n[gameKey].tracks.push(name);
+      n[gameKey].tracks.sort(function(a, b) { return a.localeCompare(b); });
       saveCustomMods(n);
     }
     setAdminInputs(function(p) { return Object.assign({}, p, { newTrack: "" }); });
@@ -2404,12 +2421,58 @@ function App() {
     );
   }
 
+  // ── ADMIN PANEL HELPERS — defined outside conditional to avoid focus loss ────
+  var MOD_PURPLE = "#c084fc";
+  var MOD_BG = "rgba(168,85,247,0.12)";
+  var MOD_BD = "rgba(168,85,247,0.4)";
+
+  function AdminInput(props) {
+    var val = adminInputs[props.k] !== undefined ? adminInputs[props.k] : "";
+    return (
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <input value={val}
+          onChange={function(e) { var v = e.target.value; setAdminInputs(function(p) { var n = Object.assign({}, p); n[props.k] = v; return n; }); }}
+          onKeyDown={function(e) { if (e.key === "Enter" && val.trim()) { props.onAdd(val); } }}
+          placeholder={props.placeholder}
+          style={{ flex: 1, padding: "7px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
+        <button onClick={function() { if (val.trim()) props.onAdd(val); }} disabled={!val.trim()}
+          style={{ padding: "7px 14px", background: val.trim() ? MOD_BG : "transparent", border: "1px solid " + (val.trim() ? MOD_BD : C.bd), borderRadius: 3, color: val.trim() ? MOD_PURPLE : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: val.trim() ? "pointer" : "not-allowed" }}>ADD</button>
+      </div>
+    );
+  }
+
+  function ModBadge() {
+    return <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>MOD</span>;
+  }
+
+  function EditInline(props) {
+    var editKey = props.type + ":" + props.id;
+    var editing = adminEditing === editKey;
+    var _ev = useState(props.value); var editVal = _ev[0]; var setEditVal = _ev[1];
+    if (editing) {
+      return (
+        <div style={{ display: "flex", gap: 4, flex: 1 }}>
+          <input value={editVal} onChange={function(e) { setEditVal(e.target.value); }} autoFocus
+            onKeyDown={function(e) { if (e.key === "Enter") props.onSave(editVal); if (e.key === "Escape") setAdminEditing(null); }}
+            style={{ flex: 1, padding: "2px 6px", background: C.bg, border: "1px solid " + MOD_BD, borderRadius: 2, color: C.tx, fontSize: 13 }} />
+          <button onClick={function() { props.onSave(editVal); }} style={{ padding: "2px 8px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>SAVE</button>
+          <button onClick={function() { setAdminEditing(null); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>✕</button>
+        </div>
+      );
+    }
+    return (
+      <span style={{ flex: 1, fontSize: 14, color: MOD_PURPLE }}>{props.value}
+        <button onClick={function() { setAdminEditing(editKey); setEditVal(props.value); }} style={{ marginLeft: 8, background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 11 }} title="Rename">✎</button>
+      </span>
+    );
+  }
+
   // ── ADMIN PANEL ─────────────────────────────────────────────────────────────
   if (step === "admin" && isAdmin) {
     var ag = GAMES[adminGame] || null;
     var agMods = (customMods[adminGame] || { tracks: [], categories: {}, customCategories: {} });
     var agCustomCats = agMods.customCategories || {};
-    var agModTracks = agMods.tracks || [];
+    var agModTracks = (agMods.tracks || []).slice().sort(function(a, b) { return a.localeCompare(b); });
 
     // Merge all categories for the selected game: built-in + custom
     var allCatsForAdmin = [];
@@ -2426,51 +2489,8 @@ function App() {
 
     // Cars for currently selected admin category
     var adminCatObj = allCatsForAdmin.find(function(c) { return c.key === adminCat; });
-    var builtInCarsForAdminCat = (adminCatObj && adminCatObj.builtIn && ag) ? (ag.categories[adminCat] ? ag.categories[adminCat].cars : []) : [];
-    var modCarsForAdminCat = (agMods.categories && agMods.categories[adminCat]) ? agMods.categories[adminCat] : [];
-
-    var MOD_PURPLE = "#c084fc";
-    var MOD_BG = "rgba(168,85,247,0.12)";
-    var MOD_BD = "rgba(168,85,247,0.4)";
-
-    function AdminInput(props) {
-      var val = adminInputs[props.k] !== undefined ? adminInputs[props.k] : "";
-      return (
-        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-          <input value={val} onChange={function(e) { setAdminInputs(function(p) { var n = Object.assign({}, p); n[props.k] = e.target.value; return n; }); }}
-            onKeyDown={function(e) { if (e.key === "Enter" && val.trim()) props.onAdd(val); }}
-            placeholder={props.placeholder}
-            style={{ flex: 1, padding: "7px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
-          <button onClick={function() { if (val.trim()) props.onAdd(val); }} disabled={!val.trim()}
-            style={{ padding: "7px 14px", background: val.trim() ? MOD_BG : "transparent", border: "1px solid " + (val.trim() ? MOD_BD : C.bd), borderRadius: 3, color: val.trim() ? MOD_PURPLE : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: val.trim() ? "pointer" : "not-allowed" }}>ADD</button>
-        </div>
-      );
-    }
-
-    function ModBadge() {
-      return <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>MOD</span>;
-    }
-
-    function EditInline(props) {
-      var editKey = props.type + ":" + props.id;
-      var editing = adminEditing === editKey;
-      var _ev = useState(props.value); var editVal = _ev[0]; var setEditVal = _ev[1];
-      if (editing) {
-        return (
-          <div style={{ display: "flex", gap: 4, flex: 1 }}>
-            <input value={editVal} onChange={function(e) { setEditVal(e.target.value); }} autoFocus onKeyDown={function(e) { if (e.key === "Enter") props.onSave(editVal); if (e.key === "Escape") setAdminEditing(null); }}
-              style={{ flex: 1, padding: "2px 6px", background: C.bg, border: "1px solid " + MOD_BD, borderRadius: 2, color: C.tx, fontSize: 13 }} />
-            <button onClick={function() { props.onSave(editVal); }} style={{ padding: "2px 8px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>SAVE</button>
-            <button onClick={function() { setAdminEditing(null); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>✕</button>
-          </div>
-        );
-      }
-      return (
-        <span style={{ flex: 1, fontSize: 14, color: MOD_PURPLE }}>{props.value}
-          <button onClick={function() { setAdminEditing(editKey); setEditVal(props.value); }} style={{ marginLeft: 8, background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 11 }} title="Rename">✎</button>
-        </span>
-      );
-    }
+    var builtInCarsForAdminCat = (adminCatObj && adminCatObj.builtIn && ag) ? (ag.categories[adminCat] ? ag.categories[adminCat].cars.slice().sort() : []) : [];
+    var modCarsForAdminCat = (agMods.categories && agMods.categories[adminCat]) ? agMods.categories[adminCat].slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
 
     return (
       <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
