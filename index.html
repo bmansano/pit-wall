@@ -576,6 +576,52 @@ const C = {
   warn: "#f59e0b", danger: "#ef4444", ok: "#22c55e",
 };
 
+// ── ADMIN PANEL HELPERS — defined at module level (outside App) to prevent focus loss ──
+var MOD_PURPLE = "#c084fc";
+var MOD_BG = "rgba(168,85,247,0.12)";
+var MOD_BD = "rgba(168,85,247,0.4)";
+
+function AdminInput(props) {
+  var val = props.inputs[props.k] !== undefined ? props.inputs[props.k] : "";
+  return (
+    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+      <input value={val}
+        onChange={function(e) { var v = e.target.value; props.setInputs(function(p) { var n = Object.assign({}, p); n[props.k] = v; return n; }); }}
+        onKeyDown={function(e) { if (e.key === "Enter" && val.trim()) { props.onAdd(val); } }}
+        placeholder={props.placeholder}
+        style={{ flex: 1, padding: "7px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
+      <button onClick={function() { if (val.trim()) props.onAdd(val); }} disabled={!val.trim()}
+        style={{ padding: "7px 14px", background: val.trim() ? MOD_BG : "transparent", border: "1px solid " + (val.trim() ? MOD_BD : C.bd), borderRadius: 3, color: val.trim() ? MOD_PURPLE : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: val.trim() ? "pointer" : "not-allowed" }}>ADD</button>
+    </div>
+  );
+}
+
+function ModBadge() {
+  return <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>MOD</span>;
+}
+
+function EditInline(props) {
+  var editKey = props.type + ":" + props.id;
+  var editing = props.adminEditing === editKey;
+  var _ev = useState(props.value); var editVal = _ev[0]; var setEditVal = _ev[1];
+  if (editing) {
+    return (
+      <div style={{ display: "flex", gap: 4, flex: 1 }}>
+        <input value={editVal} onChange={function(e) { setEditVal(e.target.value); }} autoFocus
+          onKeyDown={function(e) { if (e.key === "Enter") props.onSave(editVal); if (e.key === "Escape") props.setAdminEditing(null); }}
+          style={{ flex: 1, padding: "2px 6px", background: C.bg, border: "1px solid " + MOD_BD, borderRadius: 2, color: C.tx, fontSize: 13 }} />
+        <button onClick={function() { props.onSave(editVal); }} style={{ padding: "2px 8px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>SAVE</button>
+        <button onClick={function() { props.setAdminEditing(null); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>✕</button>
+      </div>
+    );
+  }
+  return (
+    <span style={{ flex: 1, fontSize: 14, color: MOD_PURPLE }}>{props.value}
+      <button onClick={function() { props.setAdminEditing(editKey); setEditVal(props.value); }} style={{ marginLeft: 8, background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 11 }} title="Rename">✎</button>
+    </span>
+  );
+}
+
 function Loader() {
   var _s = useState(0); var d = _s[0]; var setD = _s[1];
   useEffect(function() { var iv = setInterval(function() { setD(function(p) { return (p + 1) % 4; }); }, 280); return function() { clearInterval(iv); }; }, []);
@@ -2421,52 +2467,6 @@ function App() {
     );
   }
 
-  // ── ADMIN PANEL HELPERS — defined outside conditional to avoid focus loss ────
-  var MOD_PURPLE = "#c084fc";
-  var MOD_BG = "rgba(168,85,247,0.12)";
-  var MOD_BD = "rgba(168,85,247,0.4)";
-
-  function AdminInput(props) {
-    var val = adminInputs[props.k] !== undefined ? adminInputs[props.k] : "";
-    return (
-      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-        <input value={val}
-          onChange={function(e) { var v = e.target.value; setAdminInputs(function(p) { var n = Object.assign({}, p); n[props.k] = v; return n; }); }}
-          onKeyDown={function(e) { if (e.key === "Enter" && val.trim()) { props.onAdd(val); } }}
-          placeholder={props.placeholder}
-          style={{ flex: 1, padding: "7px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
-        <button onClick={function() { if (val.trim()) props.onAdd(val); }} disabled={!val.trim()}
-          style={{ padding: "7px 14px", background: val.trim() ? MOD_BG : "transparent", border: "1px solid " + (val.trim() ? MOD_BD : C.bd), borderRadius: 3, color: val.trim() ? MOD_PURPLE : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: val.trim() ? "pointer" : "not-allowed" }}>ADD</button>
-      </div>
-    );
-  }
-
-  function ModBadge() {
-    return <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>MOD</span>;
-  }
-
-  function EditInline(props) {
-    var editKey = props.type + ":" + props.id;
-    var editing = adminEditing === editKey;
-    var _ev = useState(props.value); var editVal = _ev[0]; var setEditVal = _ev[1];
-    if (editing) {
-      return (
-        <div style={{ display: "flex", gap: 4, flex: 1 }}>
-          <input value={editVal} onChange={function(e) { setEditVal(e.target.value); }} autoFocus
-            onKeyDown={function(e) { if (e.key === "Enter") props.onSave(editVal); if (e.key === "Escape") setAdminEditing(null); }}
-            style={{ flex: 1, padding: "2px 6px", background: C.bg, border: "1px solid " + MOD_BD, borderRadius: 2, color: C.tx, fontSize: 13 }} />
-          <button onClick={function() { props.onSave(editVal); }} style={{ padding: "2px 8px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>SAVE</button>
-          <button onClick={function() { setAdminEditing(null); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif" }}>✕</button>
-        </div>
-      );
-    }
-    return (
-      <span style={{ flex: 1, fontSize: 14, color: MOD_PURPLE }}>{props.value}
-        <button onClick={function() { setAdminEditing(editKey); setEditVal(props.value); }} style={{ marginLeft: 8, background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 11 }} title="Rename">✎</button>
-      </span>
-    );
-  }
-
   // ── ADMIN PANEL ─────────────────────────────────────────────────────────────
   if (step === "admin" && isAdmin) {
     var ag = GAMES[adminGame] || null;
@@ -2543,7 +2543,7 @@ function App() {
                 return (
                   <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
                     <ModBadge />
-                    <EditInline type="cat" id={k} value={name} onSave={function(v) { renameModCategory(adminGame, k, v); }} />
+                    <EditInline type="cat" id={k} value={name} onSave={function(v) { renameModCategory(adminGame, k, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                     <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cars.length} cars</span>
                     <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>MANAGE</button>
                     <button onClick={function() { if (confirm("Remove category \"" + name + "\" and all its cars?")) removeModCategory(adminGame, k); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
@@ -2553,7 +2553,7 @@ function App() {
 
               <div style={{ marginTop: 16, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
                 <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>NEW MOD CATEGORY</div>
-                <AdminInput k="newCat" placeholder="Category name (e.g. GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} />
+                <AdminInput k="newCat" placeholder="Category name (e.g. GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
               </div>
             </div>
           )}
@@ -2595,7 +2595,7 @@ function App() {
                     return (
                       <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
                         <ModBadge />
-                        <EditInline type={"car:" + adminCat} id={car} value={car} onSave={function(v) { renameModCar(adminGame, adminCat, car, v); }} />
+                        <EditInline type={"car:" + adminCat} id={car} value={car} onSave={function(v) { renameModCar(adminGame, adminCat, car, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                         <button onClick={function() { removeModCar(adminGame, adminCat, car); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                       </div>
                     );
@@ -2603,7 +2603,7 @@ function App() {
 
                   <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
                     <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD CAR</div>
-                    <AdminInput k="newCar" placeholder="Car name (e.g. Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} />
+                    <AdminInput k="newCar" placeholder="Car name (e.g. Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                   </div>
                 </div>
               )}
@@ -2630,7 +2630,7 @@ function App() {
                 return (
                   <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
                     <ModBadge />
-                    <EditInline type="track" id={t} value={t} onSave={function(v) { renameModTrack(adminGame, t, v); }} />
+                    <EditInline type="track" id={t} value={t} onSave={function(v) { renameModTrack(adminGame, t, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                     <button onClick={function() { removeModTrack(adminGame, t); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
                 );
@@ -2638,7 +2638,7 @@ function App() {
 
               <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
                 <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD TRACK</div>
-                <AdminInput k="newTrack" placeholder="Track name (e.g. Brasília Autódromo)" onAdd={function(v) { addModTrack(adminGame, v); }} />
+                <AdminInput k="newTrack" placeholder="Track name (e.g. Brasília Autódromo)" onAdd={function(v) { addModTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
               </div>
             </div>
           )}
