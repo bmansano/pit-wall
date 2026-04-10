@@ -1062,6 +1062,7 @@ function App() {
   var hasSession = messages.length > 0;
 
   useEffect(function() { if (user) { loadSetups(); loadMods(); } }, [user]);
+  useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
   useEffect(function() { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
   useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
@@ -1337,7 +1338,7 @@ function App() {
   function saveCustomMods(mods) {
     setCustomMods(mods);
     if (!window.sb) return;
-    window.sb.from("setups").upsert({ id: "__mods__", user_id: null, ts: new Date().toISOString(), data: mods }, { onConflict: "id" })
+    window.sb.from("setups").upsert({ id: "__mods__", user_id: user ? user.id : null, ts: new Date().toISOString(), data: mods }, { onConflict: "id" })
       .then(function(res) { if (res.error) console.error("saveCustomMods:", res.error.message); });
   }
 
