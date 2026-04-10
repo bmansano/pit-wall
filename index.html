@@ -850,9 +850,15 @@ function AuthScreen({ onLogin, initialMode }) {
     window.sb.auth.signUp({ email: email, password: password })
       .then(function(res) {
         if (res.error) throw res.error;
-        // Supabase pode exigir confirmação de e-mail dependendo das configurações
-        if (res.data.session) { onLogin(res.data.user); }
-        else { setSent(true); setBusy(false); } // e-mail de confirmação enviado
+        // Se confirmação de e-mail está desativada, a sessão é imediata — insere approval row
+        if (res.data.session && res.data.user) {
+          window.sb.from("user_approvals").upsert(
+            { user_id: res.data.user.id, email: res.data.user.email, status: "pending" },
+            { onConflict: "user_id" }
+          );
+        }
+        // Sempre mostra mensagem de pendência, nunca acessa o app direto
+        setSent(true); setBusy(false);
       })
       .catch(function(err) { setError(sbErr(err)); setBusy(false); });
   }
@@ -905,11 +911,11 @@ function AuthScreen({ onLogin, initialMode }) {
         {sent ? (
           <div style={{ textAlign: "center", padding: "16px 0" }}>
             <div style={{ fontSize: 26, color: C.ok, marginBottom: 12 }}>✓</div>
-            <div style={{ fontSize: 11, letterSpacing: 1, color: C.ok, marginBottom: 10 }}>{mode === "forgot" ? "E-MAIL ENVIADO" : "VERIFIQUE SEU E-MAIL"}</div>
+            <div style={{ fontSize: 11, letterSpacing: 1, color: C.ok, marginBottom: 10 }}>{mode === "forgot" ? "E-MAIL ENVIADO" : "CADASTRO ENVIADO"}</div>
             <p style={{ color: C.ts, fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
               {mode === "forgot"
                 ? "Verifique sua caixa de entrada e clique no link para redefinir a senha."
-                : "Confirme seu endereço de e-mail para ativar a conta, depois faça login."}
+                : "Seu cadastro foi recebido e está aguardando aprovação do administrador. Você receberá acesso assim que for aprovado."}
             </p>
             <button onClick={function() { switchMode("login"); }} style={{ color: C.ac, background: "none", border: "none", fontSize: 12, cursor: "pointer" }}>Voltar para entrar</button>
           </div>
@@ -954,6 +960,42 @@ function AuthScreen({ onLogin, initialMode }) {
             </button>
           </form>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── PENDING / REJECTED APPROVAL SCREEN ──────────────────────────────────────
+function PendingScreen(props) {
+  var isPending = props.status === "pending";
+  return (
+    <div style={{ height: "100%", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 36, userSelect: "none" }}>
+        <div style={{ width: 36, height: 36, border: "2px solid " + C.ac, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontWeight: 700, fontSize: 11, color: C.ac, letterSpacing: 1 }}>PW</span>
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: 4, color: C.tx, lineHeight: 1 }}>PIT WALL</div>
+          <div style={{ fontSize: 9, fontWeight: 600, color: C.ts, letterSpacing: 2, marginTop: 3 }}>SETUP ENGINEER</div>
+        </div>
+      </div>
+      <div style={{ width: 440, background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "40px 44px", textAlign: "center" }}>
+        <div style={{ fontSize: 36, marginBottom: 16 }}>{isPending ? "⏳" : "✕"}</div>
+        <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: isPending ? C.warn : C.danger, marginBottom: 14 }}>
+          {isPending ? "AGUARDANDO APROVAÇÃO" : "ACESSO NEGADO"}
+        </div>
+        <p style={{ color: C.ts, fontSize: 13, lineHeight: 1.7, marginBottom: 8 }}>
+          {isPending
+            ? "Seu cadastro está aguardando aprovação do administrador."
+            : "Seu acesso à plataforma foi negado. Entre em contato com o administrador para mais informações."}
+        </p>
+        {props.email && <div style={{ fontSize: 12, color: C.td, marginBottom: 28 }}>{props.email}</div>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          {isPending && (
+            <button onClick={props.onRefresh} style={{ padding: "9px 20px", background: "transparent", border: "1px solid " + C.ac, borderRadius: 4, color: C.ac, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>↻ VERIFICAR STATUS</button>
+          )}
+          <button onClick={props.onSignOut} style={{ padding: "9px 20px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 4, color: C.ts, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>SAIR DA CONTA</button>
+        </div>
       </div>
     </div>
   );
@@ -1026,6 +1068,9 @@ function App() {
   // Loaded from Supabase on init (global, shared across all users)
   var _customMods = useState({});
   var customMods = _customMods[0]; var setCustomMods = _customMods[1];
+  // User approval state
+  var _approval = useState(null); var approvalStatus = _approval[0]; var setApprovalStatus = _approval[1];
+  var _approvalUsers = useState([]); var approvalUsers = _approvalUsers[0]; var setApprovalUsers = _approvalUsers[1];
   // Admin panel state
   var _adminGame = useState(""); var adminGame = _adminGame[0]; var setAdminGame = _adminGame[1];
   var _adminSection = useState("categories"); var adminSection = _adminSection[0]; var setAdminSection = _adminSection[1];
@@ -1061,7 +1106,7 @@ function App() {
 
   var hasSession = messages.length > 0;
 
-  useEffect(function() { if (user) { loadSetups(); loadMods(); } }, [user]);
+  useEffect(function() { if (user) { loadSetups(); loadMods(); loadApprovalStatus(); } }, [user]);
   useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
   useEffect(function() { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
@@ -1340,6 +1385,48 @@ function App() {
     if (!window.sb) return;
     window.sb.from("setups").upsert({ id: "__mods__", user_id: user ? user.id : null, ts: new Date().toISOString(), data: mods }, { onConflict: "id" })
       .then(function(res) { if (res.error) console.error("saveCustomMods:", res.error.message); });
+  }
+
+  // ── APPROVAL FUNCTIONS ───────────────────────────────────────────────────────
+  function loadApprovalStatus() {
+    if (!window.sb || !user) return;
+    if (user.email === "bmansano@gmail.com") { setApprovalStatus("approved"); return; }
+    window.sb.from("user_approvals").select("status").eq("user_id", user.id).limit(1)
+      .then(function(res) {
+        if (res.error) { console.error("loadApprovalStatus:", res.error.message); return; }
+        if (res.data && res.data.length > 0) {
+          setApprovalStatus(res.data[0].status);
+        } else {
+          // Primeiro login após confirmação de e-mail: cria row de pending
+          window.sb.from("user_approvals")
+            .upsert({ user_id: user.id, email: user.email, status: "pending" }, { onConflict: "user_id" })
+            .then(function(r) { if (!r.error) setApprovalStatus("pending"); });
+        }
+      });
+  }
+
+  function loadApprovalUsers() {
+    if (!window.sb) return;
+    window.sb.from("user_approvals").select("*").order("requested_at", { ascending: false })
+      .then(function(res) {
+        if (res.error) { console.error("loadApprovalUsers:", res.error.message); return; }
+        setApprovalUsers(res.data || []);
+      });
+  }
+
+  function approveUser(userId) {
+    window.sb.from("user_approvals").update({ status: "approved", updated_at: new Date().toISOString() }).eq("user_id", userId)
+      .then(function(res) { if (!res.error) loadApprovalUsers(); });
+  }
+
+  function rejectUser(userId) {
+    window.sb.from("user_approvals").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("user_id", userId)
+      .then(function(res) { if (!res.error) loadApprovalUsers(); });
+  }
+
+  function revokeUser(userId) {
+    window.sb.from("user_approvals").update({ status: "pending", updated_at: new Date().toISOString() }).eq("user_id", userId)
+      .then(function(res) { if (!res.error) loadApprovalUsers(); });
   }
 
   function getModBase(mods, gameKey) {
@@ -2251,6 +2338,20 @@ function App() {
   );
   if (!user) return <AuthScreen onLogin={function(u) { setUser(u); }} />;
 
+  // ── APPROVAL GATE — bloqueia usuários não aprovados ──────────────────────────
+  if (!isAdmin) {
+    if (approvalStatus === null) return (
+      <div style={{ height: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontSize: 9, letterSpacing: 3, color: C.td }}>CARREGANDO...</div>
+      </div>
+    );
+    if (approvalStatus !== "approved") return (
+      <PendingScreen status={approvalStatus} email={user.email}
+        onRefresh={loadApprovalStatus}
+        onSignOut={function() { window.sb.auth.signOut(); }} />
+    );
+  }
+
   // ── CONFIG ──────────────────────────────────────────────────────────────────
   if (step === "config") {
     return (
@@ -2509,16 +2610,64 @@ function App() {
 
         {/* Section tabs */}
         <div style={{ flexShrink: 0, background: C.sfc, borderBottom: "1px solid " + C.bd, display: "flex", padding: "0 20px", gap: 0 }}>
-          {[["categories","CATEGORIES"],["cars","CARS"],["tracks","TRACKS"]].map(function(t) {
+          {[["categories","CATEGORIES"],["cars","CARS"],["tracks","TRACKS"],["users","USUÁRIOS"]].map(function(t) {
             var act = adminSection === t[0];
-            return <button key={t[0]} onClick={function() { setAdminSection(t[0]); setAdminEditing(null); }}
-              style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1.5, cursor: "pointer", marginBottom: -1 }}>{t[1]}</button>;
+            var pendingCount = t[0] === "users" ? approvalUsers.filter(function(u) { return u.status === "pending"; }).length : 0;
+            return (
+              <button key={t[0]} onClick={function() { setAdminSection(t[0]); setAdminEditing(null); if (t[0] === "users") loadApprovalUsers(); }}
+                style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1.5, cursor: "pointer", marginBottom: -1, display: "flex", alignItems: "center", gap: 6 }}>
+                {t[1]}
+                {pendingCount > 0 && <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.warn, color: "#000", fontSize: 9, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>{pendingCount}</span>}
+              </button>
+            );
           })}
         </div>
 
         {/* Content */}
         <div style={{ flex: 1, overflow: "auto", padding: "24px" }}>
-          {!adminGame && <div style={{ color: C.td, fontSize: 13, textAlign: "center", marginTop: 40 }}>Select a simulator above</div>}
+          {!adminGame && adminSection !== "users" && <div style={{ color: C.td, fontSize: 13, textAlign: "center", marginTop: 40 }}>Select a simulator above</div>}
+
+          {/* ── USERS ── */}
+          {adminSection === "users" && (
+            <div style={{ maxWidth: 680 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td }}>
+                  USUÁRIOS — {approvalUsers.length} cadastros
+                  {approvalUsers.filter(function(u) { return u.status === "pending"; }).length > 0 && (
+                    <span style={{ marginLeft: 10, color: C.warn }}>
+                      {approvalUsers.filter(function(u) { return u.status === "pending"; }).length} PENDENTES
+                    </span>
+                  )}
+                </div>
+                <button onClick={loadApprovalUsers} style={{ padding: "4px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>↻ ATUALIZAR</button>
+              </div>
+              {approvalUsers.length === 0 && <div style={{ color: C.td, fontSize: 13 }}>Nenhum cadastro encontrado.</div>}
+              {approvalUsers.map(function(u) {
+                var statusColor = u.status === "approved" ? C.ok : u.status === "rejected" ? C.danger : C.warn;
+                var statusLabel = u.status === "approved" ? "APROVADO" : u.status === "rejected" ? "NEGADO" : "PENDENTE";
+                return (
+                  <div key={u.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", marginBottom: 4, background: C.sf, border: "1px solid " + (u.status === "pending" ? "rgba(245,158,11,0.3)" : C.bd), borderRadius: 3 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: C.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                      <div style={{ fontSize: 11, color: C.td, marginTop: 2 }}>
+                        Solicitado em {new Date(u.requested_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid " + statusColor, borderRadius: 2, color: statusColor, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>{statusLabel}</span>
+                    {u.status === "pending" && (
+                      <>
+                        <button onClick={function() { approveUser(u.user_id); }} style={{ padding: "5px 14px", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 3, color: C.ok, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>APROVAR</button>
+                        <button onClick={function() { rejectUser(u.user_id); }} style={{ padding: "5px 14px", background: "transparent", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 3, color: C.danger, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>NEGAR</button>
+                      </>
+                    )}
+                    {u.status !== "pending" && (
+                      <button onClick={function() { revokeUser(u.user_id); }} style={{ padding: "5px 14px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>REVOGAR</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* ── CATEGORIES ── */}
           {adminGame && adminSection === "categories" && (
