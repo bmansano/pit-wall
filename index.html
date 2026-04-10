@@ -1312,7 +1312,7 @@ function App() {
     var catKey = category || fb.categoryKey || "";
     var trkVal = track || fb.track || "";
     var condVal = condition || fb.condition || "Dry";
-    var g = GAMES[gKey];
+    var g = getEffectiveGame(gKey);
     // Resolve category name: built-in or custom MOD category
     var catName = (g && g.categories[catKey]) ? g.categories[catKey].name
       : (customMods[gKey] && customMods[gKey].customCategories && customMods[gKey].customCategories[catKey])
@@ -1427,6 +1427,116 @@ function App() {
   function revokeUser(userId) {
     window.sb.from("user_approvals").update({ status: "pending", updated_at: new Date().toISOString() }).eq("user_id", userId)
       .then(function(res) { if (!res.error) loadApprovalUsers(); });
+  }
+
+  // ── EFFECTIVE GAME DATA — merges GAMES constant with admin edits ─────────────
+  function getEffectiveGame(gameKey) {
+    var base = GAMES[gameKey];
+    if (!base) return null;
+    var mods = customMods[gameKey] || {};
+    var catEdits = mods.builtinCatEdits || {};
+    var categories = {};
+    Object.keys(base.categories).forEach(function(k) {
+      var cat = base.categories[k];
+      var edit = catEdits[k];
+      if (edit && edit.deleted) return;
+      categories[k] = {
+        name: (edit && edit.name != null) ? edit.name : cat.name,
+        cars: (edit && edit.cars != null) ? edit.cars : cat.cars.slice()
+      };
+    });
+    return {
+      name: base.name, short: base.short,
+      tracks: (mods.builtinTrackEdits != null) ? mods.builtinTrackEdits : base.tracks,
+      categories: categories
+    };
+  }
+
+  // ── BUILT-IN EDIT HELPERS ────────────────────────────────────────────────────
+  function getBuiltinCatEntry(n, gameKey, catKey) {
+    if (!n[gameKey].builtinCatEdits) n[gameKey].builtinCatEdits = {};
+    if (!n[gameKey].builtinCatEdits[catKey]) {
+      var base = GAMES[gameKey]; var baseCat = base && base.categories[catKey];
+      n[gameKey].builtinCatEdits[catKey] = { name: null, cars: baseCat ? baseCat.cars.slice() : [] };
+    }
+    return n[gameKey].builtinCatEdits[catKey];
+  }
+
+  function renameBuiltinCat(gameKey, catKey, newName) {
+    var name = newName.trim(); if (!name) return;
+    var n = getModBase(customMods, gameKey);
+    getBuiltinCatEntry(n, gameKey, catKey).name = name;
+    saveCustomMods(n); setAdminEditing(null);
+  }
+
+  function deleteBuiltinCat(gameKey, catKey, catName) {
+    if (!confirm("Remover a categoria \"" + catName + "\" da lista?")) return;
+    var n = getModBase(customMods, gameKey);
+    if (!n[gameKey].builtinCatEdits) n[gameKey].builtinCatEdits = {};
+    n[gameKey].builtinCatEdits[catKey] = { deleted: true };
+    saveCustomMods(n); if (adminCat === catKey) setAdminCat("");
+  }
+
+  function restoreBuiltinCat(gameKey, catKey) {
+    var n = getModBase(customMods, gameKey);
+    if (n[gameKey].builtinCatEdits && n[gameKey].builtinCatEdits[catKey]) {
+      delete n[gameKey].builtinCatEdits[catKey];
+    }
+    saveCustomMods(n);
+  }
+
+  function addBuiltinCar(gameKey, catKey, carName) {
+    var name = carName.trim(); if (!name || !gameKey || !catKey) return;
+    var n = getModBase(customMods, gameKey);
+    var entry = getBuiltinCatEntry(n, gameKey, catKey);
+    if (!entry.cars.includes(name)) { entry.cars.push(name); entry.cars.sort(function(a,b){return a.localeCompare(b);}); }
+    saveCustomMods(n); setAdminInputs(function(p){return Object.assign({},p,{newBuiltinCar:""});});
+  }
+
+  function removeBuiltinCar(gameKey, catKey, carName) {
+    var n = getModBase(customMods, gameKey);
+    var entry = getBuiltinCatEntry(n, gameKey, catKey);
+    entry.cars = entry.cars.filter(function(c){return c !== carName;});
+    saveCustomMods(n);
+  }
+
+  function renameBuiltinCar(gameKey, catKey, oldName, newName) {
+    var name = newName.trim(); if (!name) return;
+    var n = getModBase(customMods, gameKey);
+    var entry = getBuiltinCatEntry(n, gameKey, catKey);
+    entry.cars = entry.cars.map(function(c){return c === oldName ? name : c;});
+    entry.cars.sort(function(a,b){return a.localeCompare(b);});
+    saveCustomMods(n); setAdminEditing(null);
+  }
+
+  function initBuiltinTracks(n, gameKey) {
+    if (n[gameKey].builtinTrackEdits == null) {
+      n[gameKey].builtinTrackEdits = GAMES[gameKey] ? GAMES[gameKey].tracks.slice() : [];
+    }
+  }
+
+  function addBuiltinTrack(gameKey, trackName) {
+    var name = trackName.trim(); if (!name || !gameKey) return;
+    var n = getModBase(customMods, gameKey); initBuiltinTracks(n, gameKey);
+    if (!n[gameKey].builtinTrackEdits.includes(name)) {
+      n[gameKey].builtinTrackEdits.push(name);
+      n[gameKey].builtinTrackEdits.sort(function(a,b){return a.localeCompare(b);});
+    }
+    saveCustomMods(n); setAdminInputs(function(p){return Object.assign({},p,{newBuiltinTrack:""});});
+  }
+
+  function removeBuiltinTrack(gameKey, trackName) {
+    var n = getModBase(customMods, gameKey); initBuiltinTracks(n, gameKey);
+    n[gameKey].builtinTrackEdits = n[gameKey].builtinTrackEdits.filter(function(t){return t !== trackName;});
+    saveCustomMods(n);
+  }
+
+  function renameBuiltinTrack(gameKey, oldName, newName) {
+    var name = newName.trim(); if (!name) return;
+    var n = getModBase(customMods, gameKey); initBuiltinTracks(n, gameKey);
+    n[gameKey].builtinTrackEdits = n[gameKey].builtinTrackEdits.map(function(t){return t === oldName ? name : t;});
+    n[gameKey].builtinTrackEdits.sort(function(a,b){return a.localeCompare(b);});
+    saveCustomMods(n); setAdminEditing(null);
   }
 
   function getModBase(mods, gameKey) {
@@ -1612,7 +1722,7 @@ function App() {
     setSelectedSetup(null);
   }
 
-  var cg = GAMES[game] || null;
+  var cg = getEffectiveGame(game) || null;
   var cc = (cg && cg.categories) ? cg.categories[category] || null : null;
   var modCarsForCat = (customMods[game] && customMods[game].categories && customMods[game].categories[category]) ? customMods[game].categories[category] : [];
   var modTracksForGame = (customMods[game] && customMods[game].tracks) ? customMods[game].tracks : [];
@@ -1820,7 +1930,7 @@ function App() {
   }
 
   function getCategoryName() {
-    var g = GAMES[game];
+    var g = getEffectiveGame(game);
     if (g && g.categories && g.categories[category]) return g.categories[category].name;
     // Custom MOD category
     if (customMods[game] && customMods[game].customCategories && customMods[game].customCategories[category]) {
@@ -1830,7 +1940,7 @@ function App() {
   }
 
   function buildSystemPrompt() {
-    var g = GAMES[game];
+    var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "Sim Racing");
     var catName = getCategoryName();
     var schema = getSetupSchema(game);
@@ -1896,7 +2006,7 @@ function App() {
   }
 
   function startSession() {
-    var g = GAMES[game];
+    var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
@@ -1906,7 +2016,7 @@ function App() {
   }
 
   function startManualSession() {
-    var g = GAMES[game];
+    var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
     var catName = getCategoryName();
     var sTypeTxt = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " (" + raceLaps + " laps)" : "");
@@ -2571,7 +2681,7 @@ function App() {
 
   // ── ADMIN PANEL ─────────────────────────────────────────────────────────────
   if (step === "admin" && isAdmin) {
-    var ag = GAMES[adminGame] || null;
+    var ag = getEffectiveGame(adminGame) || null;
     var agMods = (customMods[adminGame] || { tracks: [], categories: {}, customCategories: {} });
     var agCustomCats = agMods.customCategories || {};
     var agModTracks = (agMods.tracks || []).slice().sort(function(a, b) { return a.localeCompare(b); });
@@ -2589,10 +2699,18 @@ function App() {
     });
     allCatsForAdmin.sort(function(a, b) { return a.name.localeCompare(b.name); });
 
+    // Deleted built-in categories (have builtinCatEdits[k].deleted === true)
+    var agCatEdits = agMods.builtinCatEdits || {};
+    var deletedBuiltinCats = GAMES[adminGame] ? Object.entries(GAMES[adminGame].categories).filter(function(e) {
+      return agCatEdits[e[0]] && agCatEdits[e[0]].deleted;
+    }) : [];
+
     // Cars for currently selected admin category
     var adminCatObj = allCatsForAdmin.find(function(c) { return c.key === adminCat; });
     var builtInCarsForAdminCat = (adminCatObj && adminCatObj.builtIn && ag) ? (ag.categories[adminCat] ? ag.categories[adminCat].cars.slice().sort() : []) : [];
     var modCarsForAdminCat = (agMods.categories && agMods.categories[adminCat]) ? agMods.categories[adminCat].slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
+    // Effective built-in tracks (with edits applied)
+    var agBuiltinTracks = (agMods.builtinTrackEdits != null) ? agMods.builtinTrackEdits.slice().sort() : (GAMES[adminGame] ? GAMES[adminGame].tracks.slice().sort() : []);
 
     return (
       <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
@@ -2671,39 +2789,60 @@ function App() {
 
           {/* ── CATEGORIES ── */}
           {adminGame && adminSection === "categories" && (
-            <div style={{ maxWidth: 640 }}>
-              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 12 }}>BUILT-IN CATEGORIES — {ag ? Object.keys(ag.categories).length : 0} total (read-only)</div>
+            <div style={{ maxWidth: 680 }}>
+              {/* Built-in categories — now fully editable */}
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 10 }}>
+                CATEGORIAS DO JOGO — {ag ? Object.keys(ag.categories).length : 0} ativas
+              </div>
               {ag && Object.entries(ag.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
                 var k = e2[0]; var cat = e2[1];
-                var extraCars = (agMods.categories && agMods.categories[k]) ? agMods.categories[k].length : 0;
+                var modCount = (agMods.categories && agMods.categories[k]) ? agMods.categories[k].length : 0;
                 return (
-                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 1, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
-                    <span style={{ flex: 1, fontSize: 14, color: C.ts }}>{cat.name}</span>
-                    <span style={{ fontSize: 11, color: C.td }}>{cat.cars.length} cars{extraCars > 0 ? " + " + extraCars + " MOD" : ""}</span>
-                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>ADD CARS</button>
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                    <EditInline type="bcat" id={k} value={cat.name} onSave={function(v) { renameBuiltinCat(adminGame, k, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
+                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cat.cars.length} carros{modCount > 0 ? " + " + modCount + " MOD" : ""}</span>
+                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>GERENCIAR</button>
+                    <button onClick={function() { deleteBuiltinCat(adminGame, k, cat.name); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }} title="Remover categoria">✕</button>
                   </div>
                 );
               })}
 
-              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, margin: "20px 0 12px" }}>MOD CATEGORIES — {Object.keys(agCustomCats).length} added</div>
-              {Object.keys(agCustomCats).length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 12 }}>No custom categories yet.</div>}
+              {/* Deleted built-in categories (restorable) */}
+              {deletedBuiltinCats.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.danger, marginBottom: 6 }}>REMOVIDAS — clique RESTAURAR para desfazer</div>
+                  {deletedBuiltinCats.map(function(e2) {
+                    var k = e2[0]; var cat = e2[1];
+                    return (
+                      <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", marginBottom: 2, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 3, opacity: 0.7 }}>
+                        <span style={{ flex: 1, fontSize: 13, color: C.td, textDecoration: "line-through" }}>{cat.name}</span>
+                        <button onClick={function() { restoreBuiltinCat(adminGame, k); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.ok, borderRadius: 2, color: C.ok, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>RESTAURAR</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* MOD categories */}
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, margin: "20px 0 10px" }}>CATEGORIAS MOD — {Object.keys(agCustomCats).length} adicionadas</div>
+              {Object.keys(agCustomCats).length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 12 }}>Nenhuma categoria MOD.</div>}
               {Object.entries(agCustomCats).map(function(e2) {
                 var k = e2[0]; var name = e2[1];
                 var cars = (agMods.categories && agMods.categories[k]) ? agMods.categories[k] : [];
                 return (
-                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 2, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
                     <ModBadge />
                     <EditInline type="cat" id={k} value={name} onSave={function(v) { renameModCategory(adminGame, k, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
-                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cars.length} cars</span>
-                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>MANAGE</button>
-                    <button onClick={function() { if (confirm("Remove category \"" + name + "\" and all its cars?")) removeModCategory(adminGame, k); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cars.length} carros</span>
+                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>GERENCIAR</button>
+                    <button onClick={function() { if (confirm("Remover categoria \"" + name + "\" e todos os seus carros?")) removeModCategory(adminGame, k); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
                 );
               })}
 
               <div style={{ marginTop: 16, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
-                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>NEW MOD CATEGORY</div>
-                <AdminInput k="newCat" placeholder="Category name (e.g. GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>NOVA CATEGORIA MOD</div>
+                <AdminInput k="newCat" placeholder="Nome da categoria (ex: GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
               </div>
             </div>
           )}
@@ -2726,34 +2865,44 @@ function App() {
 
               {adminCat && adminCatObj && (
                 <div>
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 10 }}>
-                    {adminCatObj.builtIn ? "BUILT-IN CARS" : "MOD CARS"} — {adminCatObj.name}
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 12 }}>
+                    CARROS — {adminCatObj.name}
                   </div>
 
-                  {adminCatObj.builtIn && builtInCarsForAdminCat.length > 0 && (
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>BUILT-IN (read-only)</div>
-                      {builtInCarsForAdminCat.sort().map(function(car) {
-                        return <div key={car} style={{ padding: "8px 14px", marginBottom: 1, background: C.sf, border: "1px solid " + C.bd, borderRadius: 2, fontSize: 13, color: C.ts }}>{car}</div>;
+                  {/* Built-in cars — now editable */}
+                  {adminCatObj.builtIn && (
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.ts, marginBottom: 6 }}>DO JOGO — {builtInCarsForAdminCat.length} carros</div>
+                      {builtInCarsForAdminCat.map(function(car) {
+                        return (
+                          <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 2 }}>
+                            <EditInline type={"bcar:" + adminCat} id={car} value={car} onSave={function(v) { renameBuiltinCar(adminGame, adminCat, car, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
+                            <button onClick={function() { removeBuiltinCar(adminGame, adminCat, car); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                          </div>
+                        );
                       })}
+                      <div style={{ marginTop: 8, padding: "12px", background: C.sfc, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                        <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADICIONAR CARRO À LISTA DO JOGO</div>
+                        <AdminInput k="newBuiltinCar" placeholder="Nome do carro (ex: Ferrari 296 GT3)" onAdd={function(v) { addBuiltinCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                      </div>
                     </div>
                   )}
 
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 6, marginTop: adminCatObj.builtIn ? 0 : 0 }}>MOD CARS — {modCarsForAdminCat.length} added</div>
-                  {modCarsForAdminCat.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>No MOD cars yet.</div>}
+                  {/* MOD cars */}
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 6 }}>CARROS MOD — {modCarsForAdminCat.length} adicionados</div>
+                  {modCarsForAdminCat.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>Nenhum carro MOD.</div>}
                   {modCarsForAdminCat.map(function(car) {
                     return (
-                      <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
+                      <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 2, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
                         <ModBadge />
                         <EditInline type={"car:" + adminCat} id={car} value={car} onSave={function(v) { renameModCar(adminGame, adminCat, car, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                         <button onClick={function() { removeModCar(adminGame, adminCat, car); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                       </div>
                     );
                   })}
-
-                  <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
-                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD CAR</div>
-                    <AdminInput k="newCar" placeholder="Car name (e.g. Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                  <div style={{ marginTop: 8, padding: "12px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: MOD_PURPLE, marginBottom: 4 }}>ADICIONAR CARRO MOD</div>
+                    <AdminInput k="newCar" placeholder="Nome do carro (ex: Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                   </div>
                 </div>
               )}
@@ -2764,14 +2913,23 @@ function App() {
           {adminGame && adminSection === "tracks" && (
             <div style={{ display: "flex", gap: 24, alignItems: "flex-start", height: "100%" }}>
 
-              {/* Left: Built-in tracks (read-only, full height) */}
+              {/* Left: Built-in tracks — now editable */}
               {ag && (
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>BUILT-IN TRACKS — {ag.tracks.length} (read-only)</div>
-                  <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf, overflowY: "auto" }}>
-                    {ag.tracks.slice().sort().map(function(t) {
-                      return <div key={t} style={{ padding: "8px 14px", borderBottom: "1px solid " + C.bd, fontSize: 13, color: C.ts }}>{t}</div>;
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>PISTAS DO JOGO — {agBuiltinTracks.length}</div>
+                  <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf, overflowY: "auto", flex: 1 }}>
+                    {agBuiltinTracks.map(function(t) {
+                      return (
+                        <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 14px", borderBottom: "1px solid " + C.bd }}>
+                          <EditInline type="btrack" id={t} value={t} onSave={function(v) { renameBuiltinTrack(adminGame, t, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
+                          <button onClick={function() { removeBuiltinTrack(adminGame, t); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                        </div>
+                      );
                     })}
+                  </div>
+                  <div style={{ marginTop: 8, padding: "12px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADICIONAR PISTA DO JOGO</div>
+                    <AdminInput k="newBuiltinTrack" placeholder="Nome da pista (ex: Monza)" onAdd={function(v) { addBuiltinTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                   </div>
                 </div>
               )}
