@@ -2613,33 +2613,38 @@ function App() {
 
           {/* ── TRACKS ── */}
           {adminGame && adminSection === "tracks" && (
-            <div style={{ maxWidth: 640 }}>
+            <div style={{ display: "flex", gap: 24, alignItems: "flex-start", height: "100%" }}>
+
+              {/* Left: Built-in tracks (read-only, full height) */}
               {ag && (
-                <div style={{ marginBottom: 20 }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                   <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>BUILT-IN TRACKS — {ag.tracks.length} (read-only)</div>
-                  <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid " + C.bd, borderRadius: 3, background: C.sf }}>
+                  <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf, overflowY: "auto" }}>
                     {ag.tracks.slice().sort().map(function(t) {
-                      return <div key={t} style={{ padding: "6px 14px", borderBottom: "1px solid " + C.bd, fontSize: 13, color: C.ts }}>{t}</div>;
+                      return <div key={t} style={{ padding: "8px 14px", borderBottom: "1px solid " + C.bd, fontSize: 13, color: C.ts }}>{t}</div>;
                     })}
                   </div>
                 </div>
               )}
 
-              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 8 }}>MOD TRACKS — {agModTracks.length} added</div>
-              {agModTracks.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>No MOD tracks yet.</div>}
-              {agModTracks.map(function(t) {
-                return (
-                  <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
-                    <ModBadge />
-                    <EditInline type="track" id={t} value={t} onSave={function(v) { renameModTrack(adminGame, t, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
-                    <button onClick={function() { removeModTrack(adminGame, t); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
-                  </div>
-                );
-              })}
+              {/* Right: MOD tracks */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 8 }}>MOD TRACKS — {agModTracks.length} added</div>
+                {agModTracks.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>No MOD tracks yet.</div>}
+                {agModTracks.map(function(t) {
+                  return (
+                    <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 4, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
+                      <ModBadge />
+                      <EditInline type="track" id={t} value={t} onSave={function(v) { renameModTrack(adminGame, t, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
+                      <button onClick={function() { removeModTrack(adminGame, t); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                    </div>
+                  );
+                })}
 
-              <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
-                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD TRACK</div>
-                <AdminInput k="newTrack" placeholder="Track name (e.g. Brasília Autódromo)" onAdd={function(v) { addModTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD TRACK</div>
+                  <AdminInput k="newTrack" placeholder="Track name (e.g. Brasília Autódromo)" onAdd={function(v) { addModTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                </div>
               </div>
             </div>
           )}
