@@ -1001,6 +1001,98 @@ function PendingScreen(props) {
   );
 }
 
+var RATING_TAGS = ["subesterçante", "superesterçante", "instável em freada", "ótimo"];
+
+function InlineRatingWidget(props) {
+  var rating = props.rating;
+  var setRating = props.setRating;
+  var otherRatings = props.otherRatings || [];
+  var onSubmit = props.onSubmit;
+  var userId = props.userId;
+
+  var submitted = rating.submitted;
+  var selStars = rating.stars;
+  var selTag = rating.tag;
+
+  var othersOnly = otherRatings.filter(function(r) { return r.user_id !== userId; });
+  var avgStars = othersOnly.length > 0
+    ? (othersOnly.reduce(function(s, r) { return s + r.stars; }, 0) / othersOnly.length).toFixed(1)
+    : null;
+
+  return (
+    <div style={{ marginTop: 36, borderTop: "1px solid #1e1e26", paddingTop: 24, paddingBottom: 16 }}>
+      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: "#f97316", marginBottom: 6, fontWeight: 700 }}>AVALIAR SETUP</div>
+      {submitted ? (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 22 }}>
+              {[1,2,3,4,5].map(function(n) {
+                return <span key={n} style={{ color: n <= selStars ? "#f97316" : "#252530" }}>★</span>;
+              })}
+            </span>
+            {selTag && <span style={{ fontSize: 11, color: "#f97316" }}>· {selTag}</span>}
+          </div>
+          <button onClick={function() { setRating(function(p) { return Object.assign({}, p, { submitted: false }); }); }}
+            style={{ fontSize: 10, color: "#3a3a44", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1 }}>
+            ALTERAR AVALIAÇÃO
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: "#6b6b7e", marginBottom: 14, lineHeight: 1.5 }}>
+            Teste o setup na pista e avalie como ficou. Seu feedback melhora as próximas sugestões.
+          </p>
+          <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+            {[1,2,3,4,5].map(function(n) {
+              var active = selStars !== null && n <= selStars;
+              return (
+                <button key={n} onClick={function() { setRating(function(p) { return Object.assign({}, p, { stars: n }); }); }}
+                  style={{ background: "none", border: "none", fontSize: 30, cursor: "pointer", color: active ? "#f97316" : "#252530", transition: "color 0.1s", padding: "2px 4px" }}>
+                  ★
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+            {RATING_TAGS.map(function(t) {
+              var active = selTag === t;
+              return (
+                <button key={t} onClick={function() { setRating(function(p) { return Object.assign({}, p, { tag: active ? null : t }); }); }}
+                  style={{ padding: "5px 12px", background: active ? "rgba(249,115,22,0.15)" : "transparent", border: "1px solid " + (active ? "#f97316" : "#252530"), borderRadius: 20, color: active ? "#f97316" : "#6b6b7e", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+          <button onClick={function() { if (selStars) onSubmit(selStars, selTag); }} disabled={!selStars}
+            style={{ padding: "9px 24px", background: selStars ? "#f97316" : "transparent", border: "1px solid " + (selStars ? "#f97316" : "#252530"), borderRadius: 3, color: selStars ? "#000" : "#3a3a44", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, cursor: selStars ? "pointer" : "not-allowed" }}>
+            {selStars ? "ENVIAR " + selStars + "★" : "SELECIONE UMA NOTA"}
+          </button>
+        </div>
+      )}
+      {othersOnly.length > 0 && (
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #1a1a22" }}>
+          <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: "#3a3a44", marginBottom: 8 }}>
+            OUTROS PILOTOS ({othersOnly.length}) {avgStars && <span style={{ color: "#f97316" }}>· média {avgStars}★</span>}
+          </div>
+          {othersOnly.map(function(r, i) {
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 13 }}>
+                  {[1,2,3,4,5].map(function(n) {
+                    return <span key={n} style={{ color: n <= r.stars ? "#f97316" : "#252530" }}>★</span>;
+                  })}
+                </span>
+                {r.tag && <span style={{ fontSize: 10, color: "#6b6b7e" }}>· {r.tag}</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   // Auth state — undefined = checking, null = not logged in, object = logged in
   var _user = useState(undefined); var user = _user[0]; var setUser = _user[1];
@@ -1080,9 +1172,12 @@ function App() {
   // Telemetry
   var _telem = useState(null); var telemetry = _telem[0]; var setTelemetry = _telem[1];
   var _telemParsing = useState(false); var telemParsing = _telemParsing[0]; var setTelemParsing = _telemParsing[1];
-  // Fase 0: Modal de rating pós-setup { open: bool, setupId: string, stars: number|null, tag: string|null }
-  var _ratingModal = useState({ open: false, setupId: null, stars: null, tag: null });
-  var ratingModal = _ratingModal[0]; var setRatingModal = _ratingModal[1];
+  // Avaliação inline de setup
+  var sessionSetupIdRef = useRef(null);
+  var _inlineRating = useState({ stars: null, tag: null, submitted: false });
+  var inlineRating = _inlineRating[0]; var setInlineRating = _inlineRating[1];
+  var _setupRatings = useState([]);
+  var setupRatings = _setupRatings[0]; var setSetupRatings = _setupRatings[1];
   // Fase 1: A/B test RAG — atribuição persistida em localStorage (50/50)
   var _ragArm = useState(function() {
     try {
@@ -1355,7 +1450,7 @@ function App() {
         : (catKey || fb.category || "");
     var isManualSetup = messages.length === 1 && messages[0].manual === true;
     var s = {
-      id: activeSetupSrc ? activeSetupSrc.id : Date.now().toString(),
+      id: activeSetupSrc ? activeSetupSrc.id : (sessionSetupIdRef.current || Date.now().toString()),
       game: g ? g.name : (gKey || fb.game || ""),
       gameKey: gKey,
       category: catName,
@@ -2113,10 +2208,6 @@ function App() {
       var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
       if (!txt) throw new Error("Resposta vazia. Confirme se o secret ANTHROPIC_API_KEY está configurado em Edge Functions → Secrets no Supabase.");
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
-      // Fase 0: abrir modal de rating apenas após o primeiro setup gerado
-      if (!isFollowup) {
-        setRatingModal({ open: true, setupId: setupId });
-      }
     }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + e.message }]); }); })
     .finally(function() { setLoading(false); });
   }
@@ -2125,6 +2216,9 @@ function App() {
     var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
     scrollToTopAfterStreamRef.current = true;
+    sessionSetupIdRef.current = Date.now().toString();
+    setInlineRating({ stars: null, tag: null, submitted: false });
+    setSetupRatings([]);
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
@@ -2136,6 +2230,9 @@ function App() {
     var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
     skipScrollToBottomRef.current = true;
+    sessionSetupIdRef.current = Date.now().toString();
+    setInlineRating({ stars: null, tag: null, submitted: false });
+    setSetupRatings([]);
     var catName = getCategoryName();
     var sTypeTxt = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " (" + raceLaps + " laps)" : "");
     var placeholder = "## MANUAL SETUP\n\n**Simulator:** " + gameName + "\n**Category:** " + catName + "\n**Car(s):** " + selectedCars.join(", ") + "\n**Track:** " + track + "\n**Conditions:** " + condition + "\n**Session:** " + sTypeTxt + "\n\n---\n\n_This setup was created manually. Edit any parameter below by clicking on it in Edit Mode._\n\n### Aerodynamics\n| Parameter | Value |\n|---|---|\n| Front Wing | — |\n| Rear Wing | — |\n\n### Suspension\n| Parameter | Value |\n|---|---|\n| Front Ride Height | — |\n| Rear Ride Height | — |\n| Front Spring Rate | — |\n| Rear Spring Rate | — |\n| Front Damper | — |\n| Rear Damper | — |\n| Front Anti-Roll Bar | — |\n| Rear Anti-Roll Bar | — |\n\n### Tyres\n| Parameter | Value |\n|---|---|\n| Front Tyre Pressure | — |\n| Rear Tyre Pressure | — |\n| Front Camber | — |\n| Rear Camber | — |\n| Front Toe | — |\n| Rear Toe | — |\n\n### Differential\n| Parameter | Value |\n|---|---|\n| Preload | — |\n| Power | — |\n| Coast | — |\n\n### Brakes\n| Parameter | Value |\n|---|---|\n| Brake Bias | — |\n| Brake Pressure | — |";
@@ -2547,90 +2644,27 @@ function App() {
     );
   }
 
-  // ── Fase 0: Rating Modal ─────────────────────────────────────────────────────
-  function submitRating(stars, tag) {
-    var rid = ratingModal.setupId;
-    setRatingModal({ open: false, setupId: null, stars: null, tag: null });
-    if (!stars) return; // dismissed without rating
-    // Persiste no Supabase (tabela setup_ratings deve existir — ver SQL abaixo)
-    // SQL: CREATE TABLE IF NOT EXISTS setup_ratings (
-    //   id bigserial primary key,
-    //   setup_id text not null,
-    //   user_id uuid references auth.users,
-    //   stars smallint not null check (stars between 1 and 5),
-    //   tag text,
-    //   ts timestamptz default now()
-    // );
-    if (window.sb && user) {
-      window.sb.from("setup_ratings").insert({
-        setup_id: rid,
-        user_id: user.id,
-        stars: stars,
-        tag: tag || null,
-      }).then(function(res) {
-        if (res.error) console.warn("rating save:", res.error.message);
-      });
-    }
-    setToast("Rating salvo — obrigado! (" + stars + "★" + (tag ? " · " + tag : "") + ")");
+  // ── Avaliação inline de setup ────────────────────────────────────────────────
+  function loadSetupRatings(setupId) {
+    if (!window.sb || !setupId) return;
+    window.sb.from("setup_ratings").select("stars,tag,user_id").eq("setup_id", setupId)
+      .then(function(res) { if (!res.error && res.data) setSetupRatings(res.data); });
   }
 
-  function RatingModal() {
-    if (!ratingModal.open) return null;
-    var TAGS = ["subesterçante", "superesterçante", "instável em freada", "ótimo"];
-    var _sel = useState(null); var selStars = _sel[0]; var setSelStars = _sel[1];
-    var _tag = useState(null); var selTag = _tag[0]; var setSelTag = _tag[1];
-    return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }}>
-        <div style={{ background: "#12121a", border: "1px solid #252530", borderRadius: 8, padding: "28px 28px 24px", width: 360, boxShadow: "0 8px 40px rgba(0,0,0,0.7)" }}>
-          {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 12, letterSpacing: 2, color: "#f97316", fontWeight: 700 }}>AVALIAR SETUP</div>
-            <button onClick={function() { submitRating(null, null); }} style={{ background: "none", border: "none", color: "#3a3a44", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "2px 6px" }}>✕</button>
-          </div>
-          <p style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: "#6b6b7e", marginBottom: 18, lineHeight: 1.5, letterSpacing: 0.3 }}>
-            Como ficou esse setup? O feedback melhora as próximas sugestões.
-          </p>
-
-          {/* Stars */}
-          <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 20 }}>
-            {[1,2,3,4,5].map(function(n) {
-              var active = selStars !== null && n <= selStars;
-              return (
-                <button key={n} onClick={function() { setSelStars(n); }}
-                  style={{ background: "none", border: "none", fontSize: 30, cursor: "pointer", color: active ? "#f97316" : "#252530", transition: "color 0.1s", padding: "2px" }}>
-                  ★
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Tags */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 22, justifyContent: "center" }}>
-            {TAGS.map(function(t) {
-              var active = selTag === t;
-              return (
-                <button key={t} onClick={function() { setSelTag(active ? null : t); }}
-                  style={{ padding: "5px 12px", background: active ? "rgba(249,115,22,0.15)" : "transparent", border: "1px solid " + (active ? "#f97316" : "#252530"), borderRadius: 20, color: active ? "#f97316" : "#6b6b7e", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: "pointer", textTransform: "lowercase" }}>
-                  {t}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={function() { submitRating(null, null); }}
-              style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid #1e1e26", borderRadius: 4, color: "#3a3a44", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>
-              PULAR
-            </button>
-            <button onClick={function() { submitRating(selStars, selTag); }} disabled={!selStars}
-              style={{ flex: 2, padding: "10px", background: selStars ? "#f97316" : "#1e1e26", border: "none", borderRadius: 4, color: selStars ? "#000" : "#3a3a44", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, cursor: selStars ? "pointer" : "not-allowed", transition: "background 0.15s" }}>
-              ENVIAR {selStars ? selStars + "★" : ""}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  function submitInlineRating(stars, tag) {
+    var sid = sessionSetupIdRef.current;
+    setInlineRating({ stars: stars, tag: tag, submitted: true });
+    if (!window.sb || !user || !sid) return;
+    window.sb.from("setup_ratings").upsert({
+      setup_id: sid,
+      user_id: user.id,
+      stars: stars,
+      tag: tag || null,
+    }, { onConflict: "setup_id,user_id" }).then(function(res) {
+      if (res.error) console.warn("rating save:", res.error.message);
+      else loadSetupRatings(sid);
+    });
+    setToast("Avaliação salva! " + stars + "★" + (tag ? " · " + tag : ""));
   }
 
   // Toast
@@ -3622,6 +3656,15 @@ function App() {
                 <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2 }}>ANALYZING TELEMETRY</span>
               </div>
             )}
+            {!loading && messages.some(function(m) { return m.role === "assistant" && !m.manual; }) && (
+              <InlineRatingWidget
+                rating={inlineRating}
+                setRating={setInlineRating}
+                otherRatings={setupRatings}
+                onSubmit={submitInlineRating}
+                userId={user ? user.id : null}
+              />
+            )}
             <div ref={chatEndRef} />
           </div>
 
@@ -3637,7 +3680,7 @@ function App() {
           </div>
         </div>
       </div>
-      <Toast /><DiscardModal /><RatingModal />
+      <Toast /><DiscardModal />
     </div>
   );
 }
