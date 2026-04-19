@@ -1118,16 +1118,28 @@ function App() {
   var _tmapLoading = useState(null); var trackMapLoading = _tmapLoading[0]; var setTrackMapLoading = _tmapLoading[1];
   var chatEndRef = useRef(null);
   var chatTopRef = useRef(null);
+  var scrollToTopAfterStreamRef = useRef(false);
   var skipScrollToBottomRef = useRef(false);
+  var prevLoadingRef = useRef(false);
 
   var hasSession = messages.length > 0;
 
   useEffect(function() { if (user) { loadSetups(); loadMods(); loadApprovalStatus(); } }, [user]);
   useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
   useEffect(function() {
+    var justFinishedLoading = prevLoadingRef.current && !loading;
+    prevLoadingRef.current = loading;
+
+    // Manual session: go to top immediately (no streaming)
     if (skipScrollToBottomRef.current) {
       skipScrollToBottomRef.current = false;
       if (chatTopRef.current) chatTopRef.current.scrollIntoView({ behavior: "auto" });
+      return;
+    }
+    // Regular session: go to top when streaming finishes
+    if (justFinishedLoading && scrollToTopAfterStreamRef.current) {
+      scrollToTopAfterStreamRef.current = false;
+      if (chatTopRef.current) chatTopRef.current.scrollIntoView({ behavior: "smooth" });
       return;
     }
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -2112,7 +2124,7 @@ function App() {
   function startSession() {
     var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
-    skipScrollToBottomRef.current = true;
+    scrollToTopAfterStreamRef.current = true;
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
