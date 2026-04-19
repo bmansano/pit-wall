@@ -1080,6 +1080,20 @@ function App() {
   // Telemetry
   var _telem = useState(null); var telemetry = _telem[0]; var setTelemetry = _telem[1];
   var _telemParsing = useState(false); var telemParsing = _telemParsing[0]; var setTelemParsing = _telemParsing[1];
+  // Fase 0: Modal de rating pós-setup { open: bool, setupId: string, stars: number|null, tag: string|null }
+  var _ratingModal = useState({ open: false, setupId: null, stars: null, tag: null });
+  var ratingModal = _ratingModal[0]; var setRatingModal = _ratingModal[1];
+  // Fase 1: A/B test RAG — atribuição persistida em localStorage (50/50)
+  var _ragArm = useState(function() {
+    try {
+      var stored = localStorage.getItem("pw_rag_arm");
+      if (stored === "rag" || stored === "control") return stored;
+      var arm = Math.random() < 0.5 ? "rag" : "control";
+      localStorage.setItem("pw_rag_arm", arm);
+      return arm;
+    } catch(e) { return "control"; }
+  });
+  var ragArm = _ragArm[0];
   // Manual setup edits: { "msgIdx:tTblIdx:ri": newValue }
   var _editMode = useState(false); var editMode = _editMode[0]; var setEditMode = _editMode[1];
   var _manualEdits = useState({}); var manualEdits = _manualEdits[0]; var setManualEdits = _manualEdits[1];
@@ -1103,12 +1117,21 @@ function App() {
   var trackMaps = _tmaps[0]; var setTrackMaps = _tmaps[1];
   var _tmapLoading = useState(null); var trackMapLoading = _tmapLoading[0]; var setTrackMapLoading = _tmapLoading[1];
   var chatEndRef = useRef(null);
+  var chatTopRef = useRef(null);
+  var skipScrollToBottomRef = useRef(false);
 
   var hasSession = messages.length > 0;
 
   useEffect(function() { if (user) { loadSetups(); loadMods(); loadApprovalStatus(); } }, [user]);
   useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
-  useEffect(function() { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  useEffect(function() {
+    if (skipScrollToBottomRef.current) {
+      skipScrollToBottomRef.current = false;
+      if (chatTopRef.current) chatTopRef.current.scrollIntoView({ behavior: "auto" });
+      return;
+    }
+    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
   useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
   useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
   useEffect(function() {
@@ -1939,7 +1962,40 @@ function App() {
     return category || "Custom";
   }
 
-  function buildSystemPrompt() {
+  // Fase 1: Busca contexto RAG no Supabase (rag-retrieval Edge Function)
+  async function fetchRAGContext(query, gameKey, carClass, trackName, cond) {
+    if (!window.SB_URL) return "";
+    try {
+      var res = await fetch(window.SB_URL + "/functions/v1/rag-retrieval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": window.SB_KEY },
+        body: JSON.stringify({
+          query:     query,
+          game:      gameKey    || "",
+          car_class: carClass   || "",
+          track:     trackName  || "",
+          condition: cond       || "Dry",
+          top_k:     5,
+        }),
+      });
+      var data = await res.json();
+      if (!data.chunks || data.chunks.length === 0) return "";
+      // Formata os chunks para injeção no system prompt
+      return data.chunks.map(function(c) {
+        var meta = [c.game, c.car_class, c.track, c.condition].filter(Boolean).join(" | ");
+        var src  = c.source_url || c.source_type || "Community KB";
+        return "### [" + (c.title || "Setup Reference") + "]\n"
+             + "Source: " + src + (meta ? " | " + meta : "") + "\n"
+             + (c.similarity ? "Relevância: " + (c.similarity * 100).toFixed(0) + "%" : "") + "\n\n"
+             + c.content;
+      }).join("\n\n---\n\n");
+    } catch(e) {
+      console.warn("[RAG] fetchRAGContext falhou:", e.message);
+      return "";
+    }
+  }
+
+  function buildSystemPrompt(ragContext) {
     var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "Sim Racing");
     var catName = getCategoryName();
@@ -1982,16 +2038,60 @@ function App() {
       "   This replicates the in-game help text and helps the driver understand what to change.",
       "4. For feedback/follow-up: Acknowledge the issue → explain root cause → state exact parameter changes → explain effect → list interaction warnings.",
       "5. One setup per car if multiple cars selected.",
-    ].join("\n") + telemCtx;
+    ].join("\n") + telemCtx
+    // Fase 1: Injeta base de conhecimento curada (RAG) quando disponível
+    + (ragContext
+        ? "\n\n---\n\nKNOWLEDGE BASE — The following excerpts were retrieved from our curated knowledge base of real setups, engineer notes and community data. Use them as reference material — ground your specific parameter values in this data wherever possible, and cite the source when you do:\n\n" + ragContext
+        : "");
   }
 
-  function sendMsg(msg) {
+  async function sendMsg(msg) {
     if (!msg.trim()) return;
     var nm = messages.concat([{ role: "user", content: msg }]);
     setMessages(nm); setInput(""); setLoading(true);
     var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
     if (nm.length === 1) am[0].content = "[Driver]: " + msg;
-    var payload = { model: "claude-sonnet-4-20250514", max_tokens: nm.length <= 2 ? 10000 : 4000, system: buildSystemPrompt(), messages: am };
+    // ── Fase 0: Tier switching ────────────────────────────────────────────────
+    // Primeira geração (nm.length <= 2): Sonnet — máxima qualidade no setup baseline.
+    // Follow-ups (nm.length > 2): Haiku 4.5 — 1/3 do custo, qualidade equivalente para ajustes.
+    var isFollowup = nm.length > 2;
+    var model = isFollowup ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514";
+    // Fase 0: max_tokens reduzido de 10000 → 6000 na primeira geração (respostas continuam completas)
+    var maxTok = isFollowup ? 4000 : 6000;
+    var setupId = (activeSetupSrc ? activeSetupSrc.id : null) || Date.now().toString();
+
+    // ── Fase 1: RAG retrieval (braço A/B) ────────────────────────────────────
+    // Apenas no primeiro setup (não follow-ups) e somente se o usuário está no braço "rag".
+    // Falha silenciosa — nunca bloqueia a geração de setup.
+    var ragContext = "";
+    if (!isFollowup && ragArm === "rag") {
+      try {
+        var gKey = game || (activeSetupSrc && activeSetupSrc.gameKey) || "";
+        ragContext = await fetchRAGContext(msg, gKey, category, track, condition);
+        if (ragContext) console.log("[RAG] contexto recuperado (" + ragContext.length + " chars)");
+      } catch(ragErr) {
+        console.warn("[RAG] retrieval falhou silenciosamente:", ragErr.message);
+      }
+    }
+
+    // ── Fase 0: Prompt caching ────────────────────────────────────────────────
+    // System prompt como array com cache_control → Anthropic armazena os tokens de schema
+    // em cache por 5 min. Economia de ~90% nos ~3k tokens de schema por chamada.
+    var systemPromptText = buildSystemPrompt(ragContext);
+    var systemBlock = [{ type: "text", text: systemPromptText, cache_control: { type: "ephemeral" } }];
+
+    var payload = {
+      model: model,
+      max_tokens: maxTok,
+      system: systemBlock,
+      messages: am,
+      // Metadados privados para logging no proxy (stripped antes de ir à Anthropic)
+      _setup_id:    setupId,
+      _user_id:     user ? user.id : null,
+      _is_followup: isFollowup,
+      _rag_arm:     ragArm,
+      _rag_used:    ragContext.length > 0,
+    };
     fetch(window.SB_URL + "/functions/v1/anthropic-proxy", {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": window.SB_KEY },
@@ -2001,6 +2101,10 @@ function App() {
       var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
       if (!txt) throw new Error("Resposta vazia. Confirme se o secret ANTHROPIC_API_KEY está configurado em Edge Functions → Secrets no Supabase.");
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
+      // Fase 0: abrir modal de rating apenas após o primeiro setup gerado
+      if (!isFollowup) {
+        setRatingModal({ open: true, setupId: setupId });
+      }
     }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + e.message }]); }); })
     .finally(function() { setLoading(false); });
   }
@@ -2008,6 +2112,7 @@ function App() {
   function startSession() {
     var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
+    skipScrollToBottomRef.current = true;
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
@@ -2018,6 +2123,7 @@ function App() {
   function startManualSession() {
     var g = getEffectiveGame(game);
     var gameName = g ? g.name : (game || "the simulator");
+    skipScrollToBottomRef.current = true;
     var catName = getCategoryName();
     var sTypeTxt = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " (" + raceLaps + " laps)" : "");
     var placeholder = "## MANUAL SETUP\n\n**Simulator:** " + gameName + "\n**Category:** " + catName + "\n**Car(s):** " + selectedCars.join(", ") + "\n**Track:** " + track + "\n**Conditions:** " + condition + "\n**Session:** " + sTypeTxt + "\n\n---\n\n_This setup was created manually. Edit any parameter below by clicking on it in Edit Mode._\n\n### Aerodynamics\n| Parameter | Value |\n|---|---|\n| Front Wing | — |\n| Rear Wing | — |\n\n### Suspension\n| Parameter | Value |\n|---|---|\n| Front Ride Height | — |\n| Rear Ride Height | — |\n| Front Spring Rate | — |\n| Rear Spring Rate | — |\n| Front Damper | — |\n| Rear Damper | — |\n| Front Anti-Roll Bar | — |\n| Rear Anti-Roll Bar | — |\n\n### Tyres\n| Parameter | Value |\n|---|---|\n| Front Tyre Pressure | — |\n| Rear Tyre Pressure | — |\n| Front Camber | — |\n| Rear Camber | — |\n| Front Toe | — |\n| Rear Toe | — |\n\n### Differential\n| Parameter | Value |\n|---|---|\n| Preload | — |\n| Power | — |\n| Coast | — |\n\n### Brakes\n| Parameter | Value |\n|---|---|\n| Brake Bias | — |\n| Brake Pressure | — |";
@@ -2423,6 +2529,92 @@ function App() {
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={function() { setConfirmDiscard(false); }} style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1 }}>CANCEL</button>
             <button onClick={discardSession} style={{ flex: 1, padding: "10px", background: C.danger, border: "none", borderRadius: 3, color: "#fff", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>DISCARD</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Fase 0: Rating Modal ─────────────────────────────────────────────────────
+  function submitRating(stars, tag) {
+    var rid = ratingModal.setupId;
+    setRatingModal({ open: false, setupId: null, stars: null, tag: null });
+    if (!stars) return; // dismissed without rating
+    // Persiste no Supabase (tabela setup_ratings deve existir — ver SQL abaixo)
+    // SQL: CREATE TABLE IF NOT EXISTS setup_ratings (
+    //   id bigserial primary key,
+    //   setup_id text not null,
+    //   user_id uuid references auth.users,
+    //   stars smallint not null check (stars between 1 and 5),
+    //   tag text,
+    //   ts timestamptz default now()
+    // );
+    if (window.sb && user) {
+      window.sb.from("setup_ratings").insert({
+        setup_id: rid,
+        user_id: user.id,
+        stars: stars,
+        tag: tag || null,
+      }).then(function(res) {
+        if (res.error) console.warn("rating save:", res.error.message);
+      });
+    }
+    setToast("Rating salvo — obrigado! (" + stars + "★" + (tag ? " · " + tag : "") + ")");
+  }
+
+  function RatingModal() {
+    if (!ratingModal.open) return null;
+    var TAGS = ["subesterçante", "superesterçante", "instável em freada", "ótimo"];
+    var _sel = useState(null); var selStars = _sel[0]; var setSelStars = _sel[1];
+    var _tag = useState(null); var selTag = _tag[0]; var setSelTag = _tag[1];
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300 }}>
+        <div style={{ background: "#12121a", border: "1px solid #252530", borderRadius: 8, padding: "28px 28px 24px", width: 360, boxShadow: "0 8px 40px rgba(0,0,0,0.7)" }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+            <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 12, letterSpacing: 2, color: "#f97316", fontWeight: 700 }}>AVALIAR SETUP</div>
+            <button onClick={function() { submitRating(null, null); }} style={{ background: "none", border: "none", color: "#3a3a44", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "2px 6px" }}>✕</button>
+          </div>
+          <p style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: "#6b6b7e", marginBottom: 18, lineHeight: 1.5, letterSpacing: 0.3 }}>
+            Como ficou esse setup? O feedback melhora as próximas sugestões.
+          </p>
+
+          {/* Stars */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+            {[1,2,3,4,5].map(function(n) {
+              var active = selStars !== null && n <= selStars;
+              return (
+                <button key={n} onClick={function() { setSelStars(n); }}
+                  style={{ background: "none", border: "none", fontSize: 30, cursor: "pointer", color: active ? "#f97316" : "#252530", transition: "color 0.1s", padding: "2px" }}>
+                  ★
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tags */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 22, justifyContent: "center" }}>
+            {TAGS.map(function(t) {
+              var active = selTag === t;
+              return (
+                <button key={t} onClick={function() { setSelTag(active ? null : t); }}
+                  style={{ padding: "5px 12px", background: active ? "rgba(249,115,22,0.15)" : "transparent", border: "1px solid " + (active ? "#f97316" : "#252530"), borderRadius: 20, color: active ? "#f97316" : "#6b6b7e", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: "pointer", textTransform: "lowercase" }}>
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={function() { submitRating(null, null); }}
+              style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid #1e1e26", borderRadius: 4, color: "#3a3a44", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, cursor: "pointer" }}>
+              PULAR
+            </button>
+            <button onClick={function() { submitRating(selStars, selTag); }} disabled={!selStars}
+              style={{ flex: 2, padding: "10px", background: selStars ? "#f97316" : "#1e1e26", border: "none", borderRadius: 4, color: selStars ? "#000" : "#3a3a44", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, cursor: selStars ? "pointer" : "not-allowed", transition: "background 0.15s" }}>
+              ENVIAR {selStars ? selStars + "★" : ""}
+            </button>
           </div>
         </div>
       </div>
@@ -3371,6 +3563,7 @@ function App() {
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
+            <div ref={chatTopRef} />
             {messages.length === 0 && !loading && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center" }}>
                 <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 36, letterSpacing: 7, opacity: 0.05, color: C.tx, marginBottom: 16 }}>ENGINEER</div>
@@ -3432,7 +3625,7 @@ function App() {
           </div>
         </div>
       </div>
-      <Toast /><DiscardModal />
+      <Toast /><DiscardModal /><RatingModal />
     </div>
   );
 }
