@@ -699,14 +699,14 @@ function renderMd(text, prevText, opts) {
                       // Colors
                       var clr = isHeader ? C.acb
                         : isManualEdited ? "#4ade80"
-                        : changed ? C.ac
+                        : changed ? "#60a5fa"
                         : isFirst ? C.acb : C.ts;
                       var bg = isHeader ? C.acs
                         : isManualEdited ? (isFirst ? "rgba(74,222,128,0.15)" : "rgba(74,222,128,0.07)")
-                        : changed ? (isFirst ? "rgba(249,115,22,0.22)" : "rgba(249,115,22,0.10)")
+                        : changed ? (isFirst ? "rgba(96,165,250,0.18)" : "rgba(96,165,250,0.08)")
                         : isFirst ? C.acs : C.sfh;
-                      var bleft = isFirst ? "2px solid " + (isManualEdited ? "#4ade80" : C.ac) : "none";
-                      var btop  = (changed || isManualEdited) && !isHeader ? "1px solid " + (isManualEdited ? "rgba(74,222,128,0.3)" : "rgba(249,115,22,0.3)") : "none";
+                      var bleft = isFirst ? "2px solid " + (isManualEdited ? "#4ade80" : changed ? "#60a5fa" : C.ac) : "none";
+                      var btop  = (changed || isManualEdited) && !isHeader ? "1px solid " + (isManualEdited ? "rgba(74,222,128,0.3)" : "rgba(96,165,250,0.3)") : "none";
                       var bbot  = btop;
 
                       // Inline input when this cell is active
@@ -1148,7 +1148,7 @@ function LiveSetupView(props) {
           SETUP v{assistantMsgs.length}
         </div>
         {changeCount > 0 && (
-          <div style={{ padding: "2px 9px", background: "rgba(249,115,22,0.10)", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 3, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, color: C.ac, letterSpacing: 1, fontWeight: 700 }}>
+          <div style={{ padding: "2px 9px", background: "rgba(96,165,250,0.10)", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 3, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, color: "#60a5fa", letterSpacing: 1, fontWeight: 700 }}>
             {changeCount} CHANGE{changeCount !== 1 ? "S" : ""}
           </div>
         )}
@@ -3651,7 +3651,7 @@ function App() {
             <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
               {qf.map(function(f, i) {
                 return (
-                  <button key={i} onClick={function() { if (!loading) sendMsg(f); if (isMobile) setSidebarOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", marginBottom: 2, background: "transparent", border: "1px solid transparent", borderRadius: 3, color: C.ts, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1, lineHeight: 1.5 }}>
+                  <button key={i} onClick={function() { if (!loading) { skipScrollToBottomRef.current = true; scrollToTopAfterStreamRef.current = true; sendMsg(f); } if (isMobile) setSidebarOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", marginBottom: 2, background: "transparent", border: "1px solid transparent", borderRadius: 3, color: C.ts, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1, lineHeight: 1.5 }}>
                     {f}
                   </button>
                 );
@@ -3705,20 +3705,6 @@ function App() {
               </div>
             )}
 
-            {/* View toggle — shown when session has at least one follow-up */}
-            {messages.filter(function(m) { return m.role === "user"; }).length > 0 && (
-              <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
-                {[["live", "LIVE SETUP"], ["history", "FULL HISTORY"]].map(function(tab) {
-                  var active = chatView === tab[0];
-                  return (
-                    <button key={tab[0]} onClick={function() { setChatView(tab[0]); }}
-                      style={{ padding: "5px 14px", background: active ? C.acg : "transparent", border: "1px solid " + (active ? C.ac : C.bd), borderRadius: 3, color: active ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: active ? 700 : 400, letterSpacing: 1.5, cursor: "pointer" }}>
-                      {tab[1]}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
 
             {/* LIVE SETUP view: latest setup + compact feedback log */}
             {chatView === "live" && messages.length > 0 && (
@@ -3732,31 +3718,6 @@ function App() {
               />
             )}
 
-            {/* FULL HISTORY view: all messages stacked */}
-            {chatView === "history" && messages.map(function(m, i) {
-              var u = m.role === "user";
-              var prevAssistant = null;
-              if (!u && i > 0) {
-                for (var pi = i - 1; pi >= 0; pi--) {
-                  if (messages[pi].role === "assistant") { prevAssistant = messages[pi].content; break; }
-                }
-              }
-              return (
-                <div key={i} style={{ marginBottom: u ? 12 : 28 }}>
-                  {u
-                    ? <div style={{ padding: "9px 14px", background: "rgba(56,189,248,0.10)", borderLeft: "3px solid #38bdf8", color: "#7dd3fc", fontSize: 13, lineHeight: 1.6 }}>{m.content}</div>
-                    : <div style={{ lineHeight: 1.75 }}>{renderMd(m.content, prevAssistant, {
-                        msgIdx: i,
-                        edits: manualEdits,
-                        onEdit: function(key, val) { setManualEdits(function(p) { var n = Object.assign({}, p); n[key] = val; return n; }); },
-                        editMode: editMode,
-                        activeCell: activeCell,
-                        setActiveCell: setActiveCell,
-                      })}</div>
-                  }
-                </div>
-              );
-            })}
 
             {loading && (
               <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", color: C.td }}>
