@@ -670,6 +670,11 @@ function renderMd(text, prevText, opts) {
         }, 0);
         var colW = ["40%"];
         for (var ci2 = 1; ci2 < colCount; ci2++) colW.push((60 / (colCount - 1)) + "%");
+        // Detect "Current"/"New" columns in the header for intra-row diff
+        var headerCells0 = tableLines[0] ? tableLines[0].split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, "").toLowerCase(); }) : [];
+        var currentColIdx = headerCells0.indexOf("current");
+        var newColIdx     = headerCells0.indexOf("new");
+        var hasCurrNewCols = currentColIdx >= 0 && newColIdx >= 0;
         result.push(
           <table key={"tbl-" + i} style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 1px", marginBottom: 8 }}>
             <colgroup>
@@ -681,7 +686,14 @@ function renderMd(text, prevText, opts) {
                 var paramKey = cells[0] ? cells[0].replace(/\*\*/g, "").toLowerCase() : "";
                 var prevVal  = prevParams[paramKey];
                 var currVal  = cells.slice(1).join("|");
-                var changed  = prevText && ri > 0 && prevVal !== undefined && prevVal !== currVal;
+                var changed;
+                if (ri > 0 && hasCurrNewCols) {
+                  var cv = (cells[currentColIdx] || "").replace(/\*\*/g, "").trim();
+                  var nv = (cells[newColIdx]     || "").replace(/\*\*/g, "").trim();
+                  changed = cv !== nv;
+                } else {
+                  changed = prevText && ri > 0 && prevVal !== undefined && prevVal !== currVal;
+                }
                 // edit key is per-row per-table per-message
                 var eKey = msgIdx + ":t" + curTbl + ":" + ri;
                 var isManualEdited = ri > 0 && eKey in edits;
@@ -1921,6 +1933,7 @@ function App() {
     setCondition(s.condition || "Dry");
     setSessionType(s.sessionType || "race");
     setRaceLaps(s.raceLaps || "");
+    skipScrollToBottomRef.current = true;
     setMessages(s.messages || []);
     setManualEdits(s.manualEdits || {});
     setEditMode(false);
