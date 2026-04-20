@@ -1001,7 +1001,7 @@ function PendingScreen(props) {
   );
 }
 
-var RATING_TAGS = ["subesterçante", "superesterçante", "instável em freada", "ótimo"];
+var RATING_TAGS = ["understeer", "oversteer", "unstable under braking", "perfect"];
 
 function InlineRatingWidget(props) {
   var rating = props.rating;
@@ -1021,7 +1021,7 @@ function InlineRatingWidget(props) {
 
   return (
     <div style={{ marginTop: 36, borderTop: "1px solid #1e1e26", paddingTop: 24, paddingBottom: 16 }}>
-      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: "#f97316", marginBottom: 6, fontWeight: 700 }}>AVALIAR SETUP</div>
+      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: "#f97316", marginBottom: 6, fontWeight: 700 }}>RATE THIS SETUP</div>
       {submitted ? (
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -1034,13 +1034,13 @@ function InlineRatingWidget(props) {
           </div>
           <button onClick={function() { setRating(function(p) { return Object.assign({}, p, { submitted: false }); }); }}
             style={{ fontSize: 10, color: "#3a3a44", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1 }}>
-            ALTERAR AVALIAÇÃO
+            CHANGE RATING
           </button>
         </div>
       ) : (
         <div>
           <p style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: "#6b6b7e", marginBottom: 14, lineHeight: 1.5 }}>
-            Teste o setup na pista e avalie como ficou. Seu feedback melhora as próximas sugestões.
+            Test the setup on track, then rate how it performed. Your feedback improves future suggestions.
           </p>
           <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
             {[1,2,3,4,5].map(function(n) {
@@ -1066,14 +1066,14 @@ function InlineRatingWidget(props) {
           </div>
           <button onClick={function() { if (selStars) onSubmit(selStars, selTag); }} disabled={!selStars}
             style={{ padding: "9px 24px", background: selStars ? "#f97316" : "transparent", border: "1px solid " + (selStars ? "#f97316" : "#252530"), borderRadius: 3, color: selStars ? "#000" : "#3a3a44", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1.5, cursor: selStars ? "pointer" : "not-allowed" }}>
-            {selStars ? "ENVIAR " + selStars + "★" : "SELECIONE UMA NOTA"}
+            {selStars ? "SUBMIT " + selStars + "★" : "SELECT A RATING"}
           </button>
         </div>
       )}
       {othersOnly.length > 0 && (
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #1a1a22" }}>
           <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: "#3a3a44", marginBottom: 8 }}>
-            OUTROS PILOTOS ({othersOnly.length}) {avgStars && <span style={{ color: "#f97316" }}>· média {avgStars}★</span>}
+            OTHER DRIVERS ({othersOnly.length}) {avgStars && <span style={{ color: "#f97316" }}>· avg {avgStars}★</span>}
           </div>
           {othersOnly.map(function(r, i) {
             return (
@@ -1089,6 +1089,82 @@ function InlineRatingWidget(props) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function LiveSetupView(props) {
+  var messages    = props.messages;
+  var manualEdits = props.manualEdits;
+  var onEdit      = props.onEdit;
+  var editMode    = props.editMode;
+  var activeCell  = props.activeCell;
+  var setActiveCell = props.setActiveCell;
+
+  var assistantMsgs = messages.filter(function(m) { return m.role === "assistant"; });
+  var userMsgs      = messages.filter(function(m) { return m.role === "user"; });
+  var latest  = assistantMsgs[assistantMsgs.length - 1];
+  var prev    = assistantMsgs.length > 1 ? assistantMsgs[assistantMsgs.length - 2] : null;
+
+  if (!latest) return null;
+
+  // Count changed table params between latest and previous assistant message
+  var changeCount = 0;
+  if (prev) {
+    var prevParams = parseTableParams(prev.content);
+    var currParams = parseTableParams(latest.content);
+    Object.keys(currParams).forEach(function(k) {
+      if (prevParams[k] !== undefined && prevParams[k] !== currParams[k]) changeCount++;
+    });
+  }
+
+  var latestIdx = 0;
+  for (var mi = messages.length - 1; mi >= 0; mi--) {
+    if (messages[mi] === latest) { latestIdx = mi; break; }
+  }
+
+  return (
+    <div>
+      {/* Feedback log — compact strip of user messages */}
+      {userMsgs.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 8 }}>FEEDBACK LOG</div>
+          {userMsgs.map(function(m, i) {
+            return (
+              <div key={i} style={{ padding: "8px 12px", background: "rgba(56,189,248,0.05)", borderLeft: "2px solid rgba(56,189,248,0.25)", marginBottom: 4, borderRadius: "0 3px 3px 0" }}>
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, color: "#38bdf8", letterSpacing: 1, marginBottom: 3 }}>
+                  FEEDBACK · v{i + 1} → v{i + 2}
+                </div>
+                <div style={{ fontSize: 12.5, color: C.ts, lineHeight: 1.5 }}>{m.content}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Current setup header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>
+          SETUP v{assistantMsgs.length}
+        </div>
+        {changeCount > 0 && (
+          <div style={{ padding: "2px 9px", background: "rgba(249,115,22,0.10)", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 3, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, color: C.ac, letterSpacing: 1, fontWeight: 700 }}>
+            {changeCount} CHANGE{changeCount !== 1 ? "S" : ""}
+          </div>
+        )}
+      </div>
+
+      {/* Latest setup rendered with diff */}
+      <div style={{ lineHeight: 1.75 }}>
+        {renderMd(latest.content, prev ? prev.content : null, {
+          msgIdx: latestIdx,
+          edits: manualEdits,
+          onEdit: onEdit,
+          editMode: editMode,
+          activeCell: activeCell,
+          setActiveCell: setActiveCell,
+        })}
+      </div>
     </div>
   );
 }
@@ -1218,6 +1294,7 @@ function App() {
   var prevLoadingRef = useRef(false);
 
   var hasSession = messages.length > 0;
+  var _chatView = useState("live"); var chatView = _chatView[0]; var setChatView = _chatView[1];
 
   useEffect(function() { if (user) { loadSetups(); loadMods(); loadApprovalStatus(); } }, [user]);
   useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
@@ -2219,6 +2296,7 @@ function App() {
     sessionSetupIdRef.current = Date.now().toString();
     setInlineRating({ stars: null, tag: null, submitted: false });
     setSetupRatings([]);
+    setChatView("live");
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
@@ -2233,6 +2311,7 @@ function App() {
     sessionSetupIdRef.current = Date.now().toString();
     setInlineRating({ stars: null, tag: null, submitted: false });
     setSetupRatings([]);
+    setChatView("live");
     var catName = getCategoryName();
     var sTypeTxt = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " (" + raceLaps + " laps)" : "");
     var placeholder = "## MANUAL SETUP\n\n**Simulator:** " + gameName + "\n**Category:** " + catName + "\n**Car(s):** " + selectedCars.join(", ") + "\n**Track:** " + track + "\n**Conditions:** " + condition + "\n**Session:** " + sTypeTxt + "\n\n---\n\n_This setup was created manually. Edit any parameter below by clicking on it in Edit Mode._\n\n### Aerodynamics\n| Parameter | Value |\n|---|---|\n| Front Wing | — |\n| Rear Wing | — |\n\n### Suspension\n| Parameter | Value |\n|---|---|\n| Front Ride Height | — |\n| Rear Ride Height | — |\n| Front Spring Rate | — |\n| Rear Spring Rate | — |\n| Front Damper | — |\n| Rear Damper | — |\n| Front Anti-Roll Bar | — |\n| Rear Anti-Roll Bar | — |\n\n### Tyres\n| Parameter | Value |\n|---|---|\n| Front Tyre Pressure | — |\n| Rear Tyre Pressure | — |\n| Front Camber | — |\n| Rear Camber | — |\n| Front Toe | — |\n| Rear Toe | — |\n\n### Differential\n| Parameter | Value |\n|---|---|\n| Preload | — |\n| Power | — |\n| Coast | — |\n\n### Brakes\n| Parameter | Value |\n|---|---|\n| Brake Bias | — |\n| Brake Pressure | — |";
@@ -3621,13 +3700,41 @@ function App() {
             {editMode && (
               <div style={{ padding: "8px 14px", marginBottom: 12, background: "rgba(74,222,128,0.07)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 4, display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ color: "#4ade80", fontSize: 11, letterSpacing: 0.5 }}>✎</span>
-                <span style={{ fontSize: 12, color: "#4ade80" }}>Modo edição ativo — clique em qualquer valor para alterar</span>
-                {Object.keys(manualEdits).length > 0 && <span style={{ fontSize: 11, color: "#4ade80", marginLeft: "auto", opacity: 0.7 }}>{Object.keys(manualEdits).length} alteraç{Object.keys(manualEdits).length === 1 ? "ão" : "ões"}</span>}
+                <span style={{ fontSize: 12, color: "#4ade80" }}>Edit mode active — click any value to change it</span>
+                {Object.keys(manualEdits).length > 0 && <span style={{ fontSize: 11, color: "#4ade80", marginLeft: "auto", opacity: 0.7 }}>{Object.keys(manualEdits).length} edit{Object.keys(manualEdits).length !== 1 ? "s" : ""}</span>}
               </div>
             )}
-            {messages.map(function(m, i) {
+
+            {/* View toggle — shown when session has at least one follow-up */}
+            {messages.filter(function(m) { return m.role === "user"; }).length > 0 && (
+              <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
+                {[["live", "LIVE SETUP"], ["history", "FULL HISTORY"]].map(function(tab) {
+                  var active = chatView === tab[0];
+                  return (
+                    <button key={tab[0]} onClick={function() { setChatView(tab[0]); }}
+                      style={{ padding: "5px 14px", background: active ? C.acg : "transparent", border: "1px solid " + (active ? C.ac : C.bd), borderRadius: 3, color: active ? C.ac : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, fontWeight: active ? 700 : 400, letterSpacing: 1.5, cursor: "pointer" }}>
+                      {tab[1]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* LIVE SETUP view: latest setup + compact feedback log */}
+            {chatView === "live" && messages.length > 0 && (
+              <LiveSetupView
+                messages={messages}
+                manualEdits={manualEdits}
+                onEdit={function(key, val) { setManualEdits(function(p) { var n = Object.assign({}, p); n[key] = val; return n; }); }}
+                editMode={editMode}
+                activeCell={activeCell}
+                setActiveCell={setActiveCell}
+              />
+            )}
+
+            {/* FULL HISTORY view: all messages stacked */}
+            {chatView === "history" && messages.map(function(m, i) {
               var u = m.role === "user";
-              // Find previous assistant message for diff (only for follow-up responses, not first setup)
               var prevAssistant = null;
               if (!u && i > 0) {
                 for (var pi = i - 1; pi >= 0; pi--) {
@@ -3650,6 +3757,7 @@ function App() {
                 </div>
               );
             })}
+
             {loading && (
               <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", color: C.td }}>
                 <Loader />
