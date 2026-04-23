@@ -2832,7 +2832,7 @@ function App() {
 
           {/* Panel 1: Category */}
           <div style={{ width: isMobile ? "100%" : 244, display: (!isMobile || mobileConfigPanel === 0) ? "flex" : "none", flexShrink: 0, flexDirection: "column", background: C.sf, borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none" }}>
-            <div style={{ height: 38, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+            <div style={{ height: 44, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
               <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td }}>CATEGORY</span>
               {game && <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: C.td }}>{Object.keys(cg.categories).length}</span>}
             </div>
