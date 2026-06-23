@@ -43,7 +43,7 @@
     .pw-setup-grid { grid-template-columns: 1fr !important; }
     .pw-header-email { display: none !important; }
     .pw-header-discard { display: none !important; }
-    .pw-header-nav span { display: none; }
+    .pw-header-nav .pw-nav-label { display: none; }
   }
   @media (min-width: 769px) {
     .pw-mobile-only { display: none !important; }
@@ -2685,8 +2685,8 @@ function App() {
               fontWeight: 600, letterSpacing: isMobile ? 0.5 : 1.5,
               display: "flex", alignItems: "center", gap: 6,
             }}>
-              {isMobile && <span style={{ fontSize: 13 }}>{tab.icon}</span>}
-              <span>{tab.label}</span>
+              <span style={{ fontSize: 13 }}>{tab.icon}</span>
+              <span className="pw-nav-label">{tab.label}</span>
               {tab.key === "history" && savedSetups.length > 0 &&
                 <span style={{ background: C.ac, color: "#000", borderRadius: 2, padding: "1px 5px", fontSize: 10, fontWeight: 700, lineHeight: 1.6 }}>{savedSetups.length}</span>}
               {tab.key === "chat" && hasSession &&
@@ -2707,14 +2707,12 @@ function App() {
         )}
 
         {/* Created by BM3 Racing */}
-        {!isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 12 }}>
-            <span style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>
-            <a href="https://youtube.com/@bm3racing/videos?sub_confirmation=1" target="_blank" rel="noopener noreferrer" title="BM3 Racing" style={{ display: "flex", alignItems: "center", lineHeight: 0 }}>
-              <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: 22, width: "auto", display: "block" }} />
-            </a>
-          </div>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, marginRight: isMobile ? 8 : 12 }}>
+          {!isMobile && <span style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>}
+          <a href="https://youtube.com/@bm3racing/videos?sub_confirmation=1" target="_blank" rel="noopener noreferrer" title="BM3 Racing" style={{ display: "flex", alignItems: "center", lineHeight: 0 }}>
+            <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 16 : 22, width: "auto", display: "block" }} />
+          </a>
+        </div>
 
         {/* User + Logout */}
         {user && user.email && !isMobile && (
