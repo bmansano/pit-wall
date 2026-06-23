@@ -43,11 +43,42 @@
     .pw-setup-grid { grid-template-columns: 1fr !important; }
     .pw-header-email { display: none !important; }
     .pw-header-discard { display: none !important; }
-    .pw-header-nav .pw-nav-label { display: none; }
+    .pw-header-nav { display: none !important; }
+    .pw-bottom-nav { display: flex !important; }
   }
   @media (min-width: 769px) {
     .pw-mobile-only { display: none !important; }
     .pw-config-panel-tabs { display: none !important; }
+  }
+  .pw-bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: #0f1117;
+    border-top: 1px solid #2a2d3a;
+    z-index: 50;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0;
+  }
+  .pw-bottom-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 6px 4px;
+    height: 60px;
+  }
+  .pw-bottom-nav-btn .pw-bn-icon { font-size: 20px; line-height: 1; }
+  .pw-bottom-nav-btn .pw-bn-label { font-family: 'Chakra Petch', sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 1px; }
+  @media (max-width: 768px) {
+    body { padding-bottom: 60px; }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -2729,6 +2760,38 @@ function App() {
     );
   }
 
+  // Mobile bottom navigation
+  function BottomNav() {
+    if (!isMobile) return null;
+    var tabs = [
+      { key: "config", label: "CONFIG", icon: "🎛" },
+      { key: "chat", label: "ENGENHEIRO", icon: "💬" },
+      { key: "history", label: "SETUPS", icon: "📋" },
+    ];
+    if (isAdmin) tabs.push({ key: "admin", label: "ADMIN", icon: "🔧" });
+    return (
+      <div className="pw-bottom-nav">
+        {tabs.map(function(tab) {
+          var act = step === tab.key;
+          return (
+            <button key={tab.key} className="pw-bottom-nav-btn" onClick={function() {
+              if (tab.key === "config") { setStep("config"); }
+              else if (tab.key === "chat") { setStep("chat"); }
+              else if (tab.key === "admin") { setStep("admin"); if (!adminGame && Object.keys(GAMES)[0]) setAdminGame(Object.keys(GAMES)[0]); }
+              else { setStep("history"); setSelectedSetup(null); if (savedSetups.length > 0) setHistoryGame(savedSetups[0].game); }
+            }} style={{ color: act ? C.ac : C.tm }}>
+              <span className="pw-bn-icon">{tab.icon}</span>
+              <span className="pw-bn-label" style={{ color: act ? C.ac : C.td }}>
+                {tab.label}
+                {tab.key === "history" && savedSetups.length > 0 ? " (" + savedSetups.length + ")" : ""}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   // Discard confirm modal
   function DiscardModal() {
     if (!confirmDiscard) return null;
@@ -3014,7 +3077,7 @@ function App() {
           </button>
         </div>
 
-        <Toast /><DiscardModal />
+        <Toast /><DiscardModal /><BottomNav />
       </div>
     );
   }
@@ -3424,7 +3487,7 @@ function App() {
               </div>
             </div>
           </div>
-          <Toast /><DiscardModal />
+          <Toast /><DiscardModal /><BottomNav />
         </div>
       );
     }
@@ -3504,7 +3567,7 @@ function App() {
             )}
           </div>
         </div>
-        <Toast /><DiscardModal />
+        <Toast /><DiscardModal /><BottomNav />
       </div>
     );
   }
@@ -3772,7 +3835,7 @@ function App() {
           </div>
         </div>
       </div>
-      <Toast /><DiscardModal />
+      <Toast /><DiscardModal /><BottomNav />
     </div>
   );
 }
