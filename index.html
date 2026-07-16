@@ -26,7 +26,7 @@
   @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
   /* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
-  @media (max-width: 768px) {
+  @media (max-width: 899px) {
     html, body, #root { height: auto; min-height: 100%; }
     body { overflow-y: auto !important; overflow-x: hidden; }
     .pw-desktop-only { display: none !important; }
@@ -45,9 +45,12 @@
     .pw-header-discard { display: none !important; }
     .pw-header-nav { display: none !important; }
   }
-  @media (min-width: 769px) {
+  @media (min-width: 900px) {
     .pw-mobile-only { display: none !important; }
     .pw-config-panel-tabs { display: none !important; }
+  }
+  @media (max-width: 1099px) {
+    .pw-created-by-label { display: none !important; }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -1204,10 +1207,10 @@ function App() {
   var _step = useState("config"); var step = _step[0]; var setStep = _step[1];
 
   // ── RESPONSIVE ─────────────────────────────────────────────────────────────
-  var _mob = useState(function() { return window.innerWidth < 769; });
+  var _mob = useState(function() { return window.innerWidth < 900; });
   var isMobile = _mob[0]; var setIsMobile = _mob[1];
   useEffect(function() {
-    function onResize() { setIsMobile(window.innerWidth < 769); }
+    function onResize() { setIsMobile(window.innerWidth < 900); }
     window.addEventListener("resize", onResize);
     // manage body overflow
     document.body.style.overflow = isMobile ? "auto" : "hidden";
@@ -2715,10 +2718,10 @@ function App() {
           )}
 
           {/* Created by BM3 Racing */}
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, marginRight: isMobile ? 8 : 12 }}>
-            {!isMobile && <span style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, marginRight: isMobile ? 8 : 12, flexShrink: 0 }}>
+            {!isMobile && <span className="pw-created-by-label" style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>}
             <a href="https://youtube.com/@bm3racing/videos?sub_confirmation=1" target="_blank" rel="noopener noreferrer" title="BM3 Racing" style={{ display: "flex", alignItems: "center", lineHeight: 0 }}>
-              <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 16 : 22, width: "auto", display: "block" }} />
+              <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 18 : 22, width: "auto", display: "block", maxWidth: isMobile ? 80 : 120 }} />
             </a>
           </div>
 
@@ -2732,6 +2735,7 @@ function App() {
             padding: "5px 10px", background: "transparent",
             border: "1px solid " + C.bd, borderRadius: 3,
             color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1,
+            flexShrink: 0,
           }}>SAIR</button>
         </div>
 
