@@ -2254,7 +2254,7 @@ function App() {
     // Primeira geração (nm.length <= 2): Sonnet — máxima qualidade no setup baseline.
     // Follow-ups (nm.length > 2): Haiku 4.5 — 1/3 do custo, qualidade equivalente para ajustes.
     var isFollowup = nm.length > 2;
-    var model = isFollowup ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-20250514";
+    var model = isFollowup ? "claude-haiku-4-5" : "claude-sonnet-5";
     // Fase 0: max_tokens reduzido de 10000 → 6000 na primeira geração (respostas continuam completas)
     var maxTok = isFollowup ? 4000 : 6000;
     var setupId = (activeSetupSrc ? activeSetupSrc.id : null) || Date.now().toString();
