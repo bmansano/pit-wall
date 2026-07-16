@@ -838,6 +838,9 @@ function AuthScreen({ onLogin, initialMode }) {
       "Password should be at least 6 characters": "A senha deve ter no mínimo 6 caracteres.",
       "Unable to validate email address: invalid format": "E-mail inválido.",
       "Email rate limit exceeded": "Muitas tentativas. Aguarde alguns minutos.",
+      "Failed to fetch": "Não foi possível conectar ao servidor. Verifique se o projeto Supabase está ativo (supabase.com → seu projeto) e se a URL do site está autorizada em Authentication → URL Configuration.",
+      "fetch failed": "Não foi possível conectar ao servidor. Verifique se o projeto Supabase está ativo (supabase.com → seu projeto) e se a URL do site está autorizada em Authentication → URL Configuration.",
+      "Load failed": "Não foi possível conectar ao servidor. Verifique sua conexão e se o projeto Supabase está ativo.",
     };
     var msg = e && e.message ? e.message : String(e);
     return map[msg] || msg || "Ocorreu um erro. Tente novamente.";
