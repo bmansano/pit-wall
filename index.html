@@ -114,7 +114,73 @@ const GAMES = {
       ligier: { name: "Ligier", cars: ["Ligier JS2-R","Ligier P4"] },
       lambo: { name: "Lamborghini", cars: ["Lamborghini Huracán Super Trofeo","Lamborghini Diablo Super Trophy"] },
     },
-    tracks: ["Interlagos","Spa-Francorchamps","Nürburgring GP","Nürburgring Nordschleife","Nürburgring Nordschleife Tourist","Nürburgring 24H","Nürburgring 1971","Monza","Monza 1971 (with banking)","Monza 2005 (Historic)","Silverstone GP","Silverstone International","Silverstone National","Silverstone 1975 (Historic)","Silverstone 1991 (Historic)","Silverstone 2001 (Historic)","Brands Hatch GP","Brands Hatch Indy","Bathurst (Mount Panorama)","Imola","Imola 1972 (Historic)","Imola 1988 (Historic)","Imola 2001 (Historic)","Imola 2005 (Historic)","Suzuka","Kyalami","Kyalami 1976 (Classic)","Donington Park GP","Donington Park National","Snetterton 300","Snetterton 200","Oulton Park International","Oulton Park Fosters","Cadwell Park","Goiânia","Cascavel","Curitiba","Velopark","Londrina","Santa Cruz do Sul","Salvador","Curvelo","Velocittá","Spielberg (Red Bull Ring)","Spielberg Historic","Spielberg 2001 (Historic)","Hungaroring","Jerez","Barcelona-Catalunya","Barcelona-Catalunya 1991 (Chicane)","Barcelona 1999 (Historic)","Barcelona 2001 (Historic)","Hockenheimring GP","Hockenheimring National","Zolder","Zandvoort","Buenos Aires No.6","Buenos Aires No.6S","Buenos Aires No.8","Buenos Aires No.15","Watkins Glen","Long Beach","Azure Circuit (Monaco)","Le Mans (Circuit de la Sarthe)","Laguna Seca","Daytona Road Course","Daytona Tri-Oval","Sebring","Road America","Mid-Ohio","Adelaide 1988","Adelaide 1991","Indianapolis Road Course","Indianapolis Oval","Indianapolis 2001 (Historic)","Pocono Raceway","Fontana Oval","Fontana Oval Historic","Jacarepaguá","Tarumã","Guaporé"],
+    tracks: [
+      // ── BRASIL ──────────────────────────────────────────────────────────────
+      "Interlagos","Interlagos 1976 (Classic)","Interlagos 1988 (Classic)",
+      "Goiânia","Cascavel","Curitiba","Velopark","Londrina","Santa Cruz do Sul",
+      "Salvador","Curvelo","Velocittá","Jacarepaguá","Tarumã","Guaporé",
+      // ── ALEMANHA ─────────────────────────────────────────────────────────────
+      "Nürburgring GP","Nürburgring Nordschleife","Nürburgring Nordschleife Tourist",
+      "Nürburgring 24H","Nürburgring 1971 (Historic)",
+      "Hockenheimring GP","Hockenheimring National",
+      // ── BÉLGICA ──────────────────────────────────────────────────────────────
+      "Spa-Francorchamps","Spa-Francorchamps 1966 (Historic)","Spa-Francorchamps 1993 (Historic)",
+      "Zolder",
+      // ── ITÁLIA ───────────────────────────────────────────────────────────────
+      "Monza","Monza 1971 (with banking)","Monza 2005 (Historic)",
+      "Imola","Imola 1972 (Historic)","Imola 1988 (Historic)","Imola 2001 (Historic)","Imola 2005 (Historic)",
+      "Mugello",
+      // ── REINO UNIDO ──────────────────────────────────────────────────────────
+      "Silverstone GP","Silverstone International","Silverstone National",
+      "Silverstone 1975 (Historic)","Silverstone 1991 (Historic)","Silverstone 2001 (Historic)",
+      "Brands Hatch GP","Brands Hatch Indy",
+      "Donington Park GP","Donington Park National",
+      "Snetterton 300","Snetterton 200",
+      "Oulton Park International","Oulton Park Fosters",
+      "Cadwell Park",
+      // ── AUSTRÁLIA ────────────────────────────────────────────────────────────
+      "Bathurst (Mount Panorama)",
+      "Adelaide 1988","Adelaide 1991",
+      // ── JAPÃO ────────────────────────────────────────────────────────────────
+      "Suzuka","Suzuka 1977 (Historic)",
+      // ── África DO SUL ────────────────────────────────────────────────────────
+      "Kyalami","Kyalami 1976 (Classic)","Kyalami 1992 (Historic)",
+      // ── ESPANHA ──────────────────────────────────────────────────────────────
+      "Barcelona-Catalunya","Barcelona-Catalunya 1991 (Chicane)",
+      "Barcelona 1999 (Historic)","Barcelona 2001 (Historic)",
+      "Jerez",
+      // ── ÁUSTRIA ──────────────────────────────────────────────────────────────
+      "Spielberg (Red Bull Ring)","Spielberg Historic","Spielberg 2001 (Historic)",
+      // ── HUNGRIA ──────────────────────────────────────────────────────────────
+      "Hungaroring",
+      // ── HOLANDA ──────────────────────────────────────────────────────────────
+      "Zandvoort","Zandvoort 1967 (Historic)",
+      // ── MÔNACO ───────────────────────────────────────────────────────────────
+      "Azure Circuit (Monaco)","Azure Circuit 1967 (Historic)","Azure Circuit 1980 (Historic)",
+      // ── ARGENTINA ────────────────────────────────────────────────────────────
+      "Buenos Aires No.6","Buenos Aires No.6S","Buenos Aires No.8","Buenos Aires No.15",
+      // ── PORTUGAL ─────────────────────────────────────────────────────────────
+      "Estoril","Estoril 1984 (Historic)",
+      // ── ESTADOS UNIDOS ───────────────────────────────────────────────────────
+      "Watkins Glen","Long Beach","Laguna Seca",
+      "Daytona Road Course","Daytona Tri-Oval",
+      "Sebring","Road America","Mid-Ohio",
+      "Indianapolis Road Course","Indianapolis Oval","Indianapolis 2001 (Historic)",
+      "Pocono Raceway","Fontana Oval","Fontana Oval Historic",
+      // ── CANADÁ ───────────────────────────────────────────────────────────────
+      "Montreal (Circuit Gilles Villeneuve)","Montreal 1967 (St Jovite / Mont-Tremblant — Historic)",
+      // ── MÉXICO ───────────────────────────────────────────────────────────────
+      "Mexico City (Autodromo Hermanos Rodriguez)","Mexico City 1970 (Historic)",
+      // ── FRANÇA ───────────────────────────────────────────────────────────────
+      "Le Mans (Circuit de la Sarthe)",
+      "Paul Ricard","Paul Ricard 1975 (Historic)",
+      "Rouen-Les-Essarts (Historic)",
+      "Reims-Gueux (Historic)",
+      // ── PORTUGAL / AÇORES ────────────────────────────────────────────────────
+      "Terceira Island",
+      // ── OUTROS ───────────────────────────────────────────────────────────────
+      "Guia Circuit (Macau)","Guia Circuit 1967 (Macau Historic)",
+    ],
   },
   iracing: {
     name: "iRacing", short: "iRacing",
@@ -235,6 +301,16 @@ var TRACK_COUNTRY_RULES = [
   ["Kyalami","South Africa"],
   // Argentina
   ["Buenos Aires","Argentina"],
+  // Canada
+  ["Montreal","Canada"],["Mosport","Canada"],["Canadian Tire","Canada"],["Mont-Tremblant","Canada"],["St Jovite","Canada"],
+  // Mexico
+  ["Mexico City","Mexico"],["Autodromo Hermanos","Mexico"],
+  // France
+  ["Reims","France"],["Rouen","France"],
+  // Portugal (Açores)
+  ["Terceira","Portugal"],
+  // Macau
+  ["Macau","China / Macau"],["Guia","China / Macau"],
   // USA
   ["Watkins Glen","USA"],["Long Beach","USA"],["Laguna Seca","USA"],
   ["WeatherTech","USA"],["Daytona","USA"],["Sebring","USA"],["Road America","USA"],
@@ -250,8 +326,6 @@ var TRACK_COUNTRY_RULES = [
   ["Detroit","USA"],["Mount Washington","USA"],["Crandon","USA"],["Eldora","USA"],
   ["Williams Grove","USA"],["Knoxville","USA"],["Volusia","USA"],["Limaland","USA"],
   ["Lucas Oil Speedway","USA"],["USA International","USA"],
-  // Canada
-  ["Mosport","Canada"],["Canadian Tire","Canada"],
   // Middle East
   ["Bahrain","Bahrain"],["Jeddah","Saudi Arabia"],["Lusail","Qatar"],["Dubai","UAE"],
   // Asia
