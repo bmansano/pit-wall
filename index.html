@@ -1,7 +1,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PIT WALL — Sim Racing Setup Engineer</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0b'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23f97316' stroke-width='2.5'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-weight='900' font-size='13' fill='%23f97316' text-anchor='middle' letter-spacing='0.5'%3EPW%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,14 +26,14 @@
   @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
   /* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
-  @media (max-width: 768px) {
+  @media (max-width: 899px) {
     html, body, #root { height: auto; min-height: 100%; }
     body { overflow-y: auto !important; overflow-x: hidden; }
     .pw-desktop-only { display: none !important; }
     .pw-mobile-only { display: flex !important; }
     .pw-sim-bar { flex-wrap: wrap; height: auto !important; padding: 8px 12px !important; gap: 6px !important; }
-    .pw-config-panels { flex-direction: column !important; overflow: visible !important; }
-    .pw-footer-bar { flex-wrap: wrap; height: auto !important; padding: 12px !important; gap: 8px !important; }
+    .pw-config-panels { flex-direction: column !important; overflow: visible !important; padding-bottom: 140px; }
+    .pw-footer-bar { flex-wrap: wrap; height: auto !important; padding: 12px !important; gap: 8px !important; position: fixed !important; bottom: 0; left: 0; right: 0; z-index: 10; }
     .pw-chat-sidebar-overlay { position: fixed !important; top: 0; left: 0; bottom: 0; width: 85vw !important; z-index: 50; box-shadow: 4px 0 24px rgba(0,0,0,0.8); }
     .pw-chat-main { min-width: 0 !important; }
     .pw-history-sidebar { width: 100% !important; flex-direction: row !important; overflow-x: auto; flex-shrink: 0; border-right: none !important; border-bottom: 1px solid #1e1e26; max-height: 52px; }
@@ -45,9 +45,12 @@
     .pw-header-discard { display: none !important; }
     .pw-header-nav { display: none !important; }
   }
-  @media (min-width: 769px) {
+  @media (min-width: 900px) {
     .pw-mobile-only { display: none !important; }
     .pw-config-panel-tabs { display: none !important; }
+  }
+  @media (max-width: 1099px) {
+    .pw-created-by-label { display: none !important; }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -86,7 +89,8 @@ const GAMES = {
       gt1: { name: "GT1", cars: ["McLaren F1 GTR Longtail","Mercedes-Benz CLK LM","Porsche 911 GT1","Nissan R390 GT1"] },
       gte: { name: "GTE", cars: ["Porsche 911 RSR-19","Chevrolet Corvette C8.R","BMW M8 GTE"] },
       lmdh: { name: "LMDh / Hypercar", cars: ["Porsche 963","Cadillac V-Series.R","BMW M Hybrid V8","Alpine A242","Lamborghini SC63"] },
-      prototype: { name: "Prototype (P2 / DPi / Group C)", cars: ["Cadillac DPi","Ginetta G58","Porsche 962C","Nissan R89C","Sauber C9","Corvette GTP (Group C)"] },
+      lmp1_modern: { name: "LMP1 / DPi (Modern)", cars: ["Cadillac DPi","Ginetta G58"] },
+      group_c: { name: "Group C", cars: ["Porsche 962C","Nissan R89C","Sauber C9","Corvette GTP"] },
       brazilian_endurance: { name: "Brazilian Endurance (Império)", cars: ["MetalMoro AJR Chevy (P1)","MetalMoro AJR Honda (P1)","MetalMoro AJR Judd (P1)","MetalMoro AJR V6 (P1)","Sigma P1 (P2)","MCR S2000 (P4)","MetalMoro MRX Duratec (P2)","MetalMoro MRX Duratec (P3)","MetalMoro MRX Duratec (P4)","MetalMoro MRX Honda (P3)","Roco 001 (P3)"] },
       formula_modern: { name: "Formula Modern", cars: ["F-Ultimate Gen 1","F-Ultimate Gen 2","F-Hybrid Gen 1","F-Hybrid Gen 2","F-Hybrid Gen 3","F-V10 Gen 2","F-Reiza"] },
       formula_90s: { name: "Formula 90s", cars: ["F-Edge Model 1 (V12)","F-Edge Model 2 (V10)","F-Edge Model 3 (V8)","F-V10 Gen 1","McLaren MP4/12","McLaren MP4/6","McLaren MP4/5B","F-Classic Gen 3 Model 1","F-Classic Gen 3 Model 2","F-Classic Gen 3 Model 3","F-Classic Gen 3 Model 4","F-Classic Gen 4 Model 1","F-Classic Gen 4 Model 2","F-Classic Gen 4 Model 3"] },
@@ -110,7 +114,10 @@ const GAMES = {
       gt5: { name: "GT5", cars: ["Ginetta G40 GT5","Puma P052 GT5"] },
       brazilian_classics: { name: "Brazilian Classics / Historics", cars: ["Chevrolet Opala '79","Chevrolet Opala '86","Old Stock Opala","Fiat Uno (Copa Uno)","VW Fusca","VW Fusca HC1","VW Fusca HC2","VW Gol","VW Passat","Chevrolet Chevette CCB","Chevrolet Montana","Sprint Race","Mitsubishi Lancer R","Mitsubishi Lancer RS","BMW M1 Procar"] },
       vintage_tc: { name: "Vintage Touring Cars", cars: ["BMW 2002 Turbo","Mini Cooper S","Lotus 23","Chevrolet Corvette C3","Chevrolet Corvette C3 R","Mercedes-Benz 190E EVO 2 DTM (Group A)","BMW M3 Sport Evo Group A"] },
-      gt1_2005: { name: "Endurance 2005", cars: ["GT1 2005 cars","GT2 2005 cars","GTR 2005 cars","LMP1 2005 cars","LMP2 2005 cars"] },
+      gt1_2005: { name: "GT1 2005 (FIA GT / Le Mans)", cars: ["Ferrari 550 Maranello GT1","Saleen S7-R","Dodge Viper GTS-R","Maserati MC12 GT1","Aston Martin DBR9"] },
+      gt2_2005: { name: "GT2 2005 (FIA GT / Le Mans)", cars: ["Porsche 911 GT3 RSR (996)","Ferrari 360 Modena GTC","Chevrolet Corvette C5.R"] },
+      lmp1_2005: { name: "LMP1 2005 (Le Mans)", cars: ["Bentley Speed 8","Audi R8 LMP","Pescarolo C60 Judd"] },
+      lmp2_2005: { name: "LMP2 2005 (Le Mans)", cars: ["Porsche RS Spyder","Acura ARX-01b","Lola B05/40 AER","Courage C65"] },
       ligier: { name: "Ligier", cars: ["Ligier JS2-R","Ligier P4"] },
       lambo: { name: "Lamborghini", cars: ["Lamborghini Huracán Super Trofeo","Lamborghini Diablo Super Trophy"] },
     },
@@ -143,7 +150,7 @@ const GAMES = {
       "Adelaide 1988","Adelaide 1991",
       // ── JAPÃO ────────────────────────────────────────────────────────────────
       "Suzuka","Suzuka 1977 (Historic)",
-      // ── África DO SUL ────────────────────────────────────────────────────────
+      // ── ÁFRICA DO SUL ────────────────────────────────────────────────────────
       "Kyalami","Kyalami 1976 (Classic)","Kyalami 1992 (Historic)",
       // ── ESPANHA ──────────────────────────────────────────────────────────────
       "Barcelona-Catalunya","Barcelona-Catalunya 1991 (Chicane)",
@@ -178,7 +185,7 @@ const GAMES = {
       "Reims-Gueux (Historic)",
       // ── PORTUGAL / AÇORES ────────────────────────────────────────────────────
       "Terceira Island",
-      // ── OUTROS ───────────────────────────────────────────────────────────────
+      // ── MACAU ────────────────────────────────────────────────────────────────
       "Guia Circuit (Macau)","Guia Circuit 1967 (Macau Historic)",
     ],
   },
@@ -301,16 +308,6 @@ var TRACK_COUNTRY_RULES = [
   ["Kyalami","South Africa"],
   // Argentina
   ["Buenos Aires","Argentina"],
-  // Canada
-  ["Montreal","Canada"],["Mosport","Canada"],["Canadian Tire","Canada"],["Mont-Tremblant","Canada"],["St Jovite","Canada"],
-  // Mexico
-  ["Mexico City","Mexico"],["Autodromo Hermanos","Mexico"],
-  // France
-  ["Reims","France"],["Rouen","France"],
-  // Portugal (Açores)
-  ["Terceira","Portugal"],
-  // Macau
-  ["Macau","China / Macau"],["Guia","China / Macau"],
   // USA
   ["Watkins Glen","USA"],["Long Beach","USA"],["Laguna Seca","USA"],
   ["WeatherTech","USA"],["Daytona","USA"],["Sebring","USA"],["Road America","USA"],
@@ -326,6 +323,8 @@ var TRACK_COUNTRY_RULES = [
   ["Detroit","USA"],["Mount Washington","USA"],["Crandon","USA"],["Eldora","USA"],
   ["Williams Grove","USA"],["Knoxville","USA"],["Volusia","USA"],["Limaland","USA"],
   ["Lucas Oil Speedway","USA"],["USA International","USA"],
+  // Canada
+  ["Mosport","Canada"],["Canadian Tire","Canada"],
   // Middle East
   ["Bahrain","Bahrain"],["Jeddah","Saudi Arabia"],["Lusail","Qatar"],["Dubai","UAE"],
   // Asia
@@ -912,6 +911,9 @@ function AuthScreen({ onLogin, initialMode }) {
       "Password should be at least 6 characters": "A senha deve ter no mínimo 6 caracteres.",
       "Unable to validate email address: invalid format": "E-mail inválido.",
       "Email rate limit exceeded": "Muitas tentativas. Aguarde alguns minutos.",
+      "Failed to fetch": "Não foi possível conectar ao servidor. Verifique se o projeto Supabase está ativo (supabase.com → seu projeto) e se a URL do site está autorizada em Authentication → URL Configuration.",
+      "fetch failed": "Não foi possível conectar ao servidor. Verifique se o projeto Supabase está ativo (supabase.com → seu projeto) e se a URL do site está autorizada em Authentication → URL Configuration.",
+      "Load failed": "Não foi possível conectar ao servidor. Verifique sua conexão e se o projeto Supabase está ativo.",
     };
     var msg = e && e.message ? e.message : String(e);
     return map[msg] || msg || "Ocorreu um erro. Tente novamente.";
@@ -1275,10 +1277,10 @@ function App() {
   var _step = useState("config"); var step = _step[0]; var setStep = _step[1];
 
   // ── RESPONSIVE ─────────────────────────────────────────────────────────────
-  var _mob = useState(function() { return window.innerWidth < 769; });
+  var _mob = useState(function() { return window.innerWidth < 900; });
   var isMobile = _mob[0]; var setIsMobile = _mob[1];
   useEffect(function() {
-    function onResize() { setIsMobile(window.innerWidth < 769); }
+    function onResize() { setIsMobile(window.innerWidth < 900); }
     window.addEventListener("resize", onResize);
     // manage body overflow
     document.body.style.overflow = isMobile ? "auto" : "hidden";
@@ -2786,10 +2788,10 @@ function App() {
           )}
 
           {/* Created by BM3 Racing */}
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, marginRight: isMobile ? 8 : 12 }}>
-            {!isMobile && <span style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, marginRight: isMobile ? 8 : 12, flexShrink: 0 }}>
+            {!isMobile && <span className="pw-created-by-label" style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>}
             <a href="https://youtube.com/@bm3racing/videos?sub_confirmation=1" target="_blank" rel="noopener noreferrer" title="BM3 Racing" style={{ display: "flex", alignItems: "center", lineHeight: 0 }}>
-              <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 16 : 22, width: "auto", display: "block" }} />
+              <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 18 : 22, width: "auto", display: "block", maxWidth: isMobile ? 80 : 120 }} />
             </a>
           </div>
 
@@ -2803,6 +2805,7 @@ function App() {
             padding: "5px 10px", background: "transparent",
             border: "1px solid " + C.bd, borderRadius: 3,
             color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1,
+            flexShrink: 0,
           }}>SAIR</button>
         </div>
 
