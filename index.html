@@ -1494,13 +1494,15 @@ function App() {
       if (chatTopRef.current) chatTopRef.current.scrollIntoView({ behavior: "auto" });
       return;
     }
-    // Regular session: go to top when streaming finishes
-    if (justFinishedLoading && scrollToTopAfterStreamRef.current) {
+    // When any response finishes streaming, scroll to the top so the user
+    // sees the beginning of the setup/answer — not the bottom.
+    if (justFinishedLoading) {
       scrollToTopAfterStreamRef.current = false;
       if (chatTopRef.current) chatTopRef.current.scrollIntoView({ behavior: "smooth" });
       return;
     }
-    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    // While streaming, follow the output at the bottom so the user can watch it arrive.
+    if (loading && chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
   useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
   useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
