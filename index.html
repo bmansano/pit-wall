@@ -740,6 +740,64 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
     }, function (e) { return { source: "local", profiles: all, error: e }; });
   };
 
+  // ═════════════════════════ manual-setup template (real parameters, not a generic list) ═════════════════════════
+  // Turn a game schema text ("═══ TAB ═══", "[GROUP]", "• Param: range | Other: range") into groups of parameter names.
+  PW.schemaGroups = function (text) {
+    var groups = [], h2 = "", cur = null;
+    String(text || "").split("\n").forEach(function (raw) {
+      var t = raw.trim(), m;
+      if ((m = t.match(/^═+\s*(.+?)\s*═+$/))) { h2 = m[1]; cur = null; return; }
+      if ((m = t.match(/^\[([^\]]+)\]$/))) { cur = { h2: h2, h3: m[1], params: [] }; groups.push(cur); return; }
+      if (t.charAt(0) === "•" && cur) {
+        var segs = t.replace(/^•\s*/, "").split(/\s\|\s/);
+        segs.forEach(function (seg, i) {
+          var ix = seg.indexOf(": "); if (ix < 0) return;
+          var name = seg.slice(0, ix).replace(/\s*[—–]\s.*$/, "").trim();
+          if (name && name.length <= 70 && (i === 0 || /^[A-Z0-9]/.test(name)) && cur.params.indexOf(name) < 0) cur.params.push(name);
+        });
+      }
+    });
+    return groups.filter(function (g) { return g.params.length; });
+  };
+  var MANUAL_GENERIC = [
+    ["Aerodynamics", ["Front Wing", "Rear Wing"]],
+    ["Suspension", ["Front Ride Height", "Rear Ride Height", "Front Spring Rate", "Rear Spring Rate", "Front Damper", "Rear Damper", "Front Anti-Roll Bar", "Rear Anti-Roll Bar"]],
+    ["Tyres", ["Front Tyre Pressure", "Rear Tyre Pressure", "Front Camber", "Rear Camber", "Front Toe", "Rear Toe"]],
+    ["Differential", ["Preload", "Power", "Coast"]],
+    ["Brakes", ["Brake Bias", "Brake Pressure"]],
+  ];
+  // meta: { gameName, catName, cars[], track, cond, sessLabel }; profile: verified profile or null; schemaText: game schema or ""
+  PW.manualTemplate = function (meta, profile, schemaText) {
+    var out = "## MANUAL SETUP\n\n**Simulator:** " + meta.gameName + "\n**Category:** " + meta.catName + "\n**Car(s):** " + (meta.cars || []).join(", ") + "\n**Track:** " + meta.track + "\n**Conditions:** " + meta.cond + "\n**Session:** " + meta.sessLabel + "\n\n---\n\n";
+    var tbl = function (rows) { return "| Parameter | Value |\n|---|---|\n" + rows.map(function (r) { return "| " + r[0] + " | " + (r[1] === "" || r[1] == null ? "—" : r[1]) + " |"; }).join("\n") + "\n\n"; };
+    if (profile) {
+      out += "_Parameters below are the editable ones of this car's own setup screens (verified profile). Edit any value by clicking on it in Edit Mode._\n\n";
+      profile.tabs.forEach(function (t) {
+        var any = false;
+        t.groups.forEach(function (g) {
+          var rows = g.params.filter(function (p) { return p.editable; });
+          if (!rows.length) return;
+          if (!any) { out += "## " + t.name + "\n"; any = true; }
+          out += "### " + g.name + "\n" + tbl(rows.map(function (p) { return [p.name, p.shown]; }));
+        });
+      });
+      return out.replace(/\n+$/, "");
+    }
+    var groups = PW.schemaGroups(schemaText);
+    if (groups.length) {
+      out += "_Parameter list taken from this simulator's setup screens (generic for the class — some rows may not exist on your car). Edit any value by clicking on it in Edit Mode._\n\n";
+      var lastH2 = null;
+      groups.forEach(function (g) {
+        if (g.h2 && g.h2 !== lastH2) { out += "## " + g.h2 + "\n"; lastH2 = g.h2; }
+        out += "### " + g.h3 + "\n" + tbl(g.params.map(function (n) { return [n, ""]; }));
+      });
+      return out.replace(/\n+$/, "");
+    }
+    out += "_This setup was created manually. Edit any parameter below by clicking on it in Edit Mode._\n\n";
+    MANUAL_GENERIC.forEach(function (g) { out += "### " + g[0] + "\n" + tbl(g[1].map(function (n) { return [n, ""]; })); });
+    return out.replace(/\n+$/, "");
+  };
+
   // ═════════════════════════ last-used configuration (setup builder) ═════════════════════════
   PW.lastConfig = {
     key: "pw_last_config",
@@ -1441,7 +1499,118 @@ RACEROOM RACING EXPERIENCE — SETUP SCHEMA
 • Differential Coast Lock: 10–60%
 • Gear Ratios: final drive + individual gear ratios
 `,
+
+  f1_25: `
+F1 25 — SETUP SCHEMA (2025 cars and the 2026 Season Pack cars)
+Typical in-game ranges. They are approximate: a verified parameter profile, when supplied, overrides everything below. The F1 setup screen is a single list per section — there are no damper (bump/rebound) clicks and no gear ratios.
+
+[AERODYNAMICS]
+• Front Wing Aero: 0–50
+• Rear Wing Aero: 0–50
+
+[TRANSMISSION]
+• Differential Adjustment On Throttle: 10–100 %
+• Differential Adjustment Off Throttle: 10–100 %
+• Engine Braking: 0–100 %
+
+[SUSPENSION GEOMETRY]
+• Front Camber: -3.50 to -2.50 deg
+• Rear Camber: -2.00 to -0.50 deg
+• Front Toe: 0.00 to 0.50 deg
+• Rear Toe: 0.00 to 0.50 deg
+
+[SUSPENSION]
+• Front Suspension: 1–41
+• Rear Suspension: 1–41
+• Front Anti-Roll Bar: 1–21
+• Rear Anti-Roll Bar: 1–21
+• Front Ride Height: 10–40
+• Rear Ride Height: 40–100
+
+[BRAKES]
+• Brake Pressure: 80–100 %
+• Front Brake Bias: 50–70 %
+
+[TYRES]
+• Front Right Tyre Pressure: 22.5–29.5 psi
+• Front Left Tyre Pressure: 22.5–29.5 psi
+• Rear Right Tyre Pressure: 20.5–26.5 psi
+• Rear Left Tyre Pressure: 20.5–26.5 psi
+
+[RACE PLAN]
+• Fuel Load: laps x consumption + margin
+• Tyre compound per stint: Soft / Medium / Hard (dry), Intermediate, Wet
+
+2026 Season Pack cars use the new regulations (active aero, 50/50 hybrid power unit, Overtake and Boost modes). If you are not sure a 2026 car exposes one of the items above, list it under '⚠ Verify in game'.
+`,
+
+  acc: `
+ASSETTO CORSA COMPETIZIONE — SETUP SCHEMA (GT3 / GT4 / GT2 / one-make cars)
+Typical ranges; real limits are car-specific and shown in the garage. A verified parameter profile, when supplied, overrides everything below.
+
+[TYRES]
+• Tyre Pressure (LF / RF / LR / RR): 20.3–35.0 psi selectable; GT3 dry target when hot ≈ 27.3–27.8 psi (set cold about 1.0–1.5 psi lower)
+• Camber (per wheel): GT3 front ≈ -5.0 to -2.5 deg, rear ≈ -3.5 to -1.5 deg — car-specific
+• Toe (per wheel): front ≈ -0.40 to +0.40 deg, rear ≈ 0.00 to +0.30 deg — car-specific
+• Caster (front): car-specific, ≈ 5.0–10.0 deg
+
+[ELECTRONICS]
+• TC1: 0–12 (car-specific maximum)
+• TC2: 0–12 (car-specific maximum)
+• ABS: 0–12 (car-specific maximum)
+• ECU Map: 1–5
+• Fuel Mix: 1–3
+• Telemetry Laps: 0–5
+
+[FUEL & STRATEGY]
+• Fuel: litres
+• Tyre Set: set number
+• Front Brake Pads: 1–4
+• Rear Brake Pads: 1–4
+
+[MECHANICAL GRIP]
+• Anti-Roll Bar Front: car-specific steps
+• Anti-Roll Bar Rear: car-specific steps
+• Brake Power: 80–100 %
+• Brake Bias: ≈ 52–62 % front
+• Steering Ratio: car-specific
+• Wheel Rate (per corner): N/mm, car-specific
+• Bump Stop Rate (per corner): N/mm
+• Bump Stop Range (per corner): mm
+• Preload Differential: Nm, car-specific (not on every car)
+
+[DAMPERS] (per corner)
+• Bump Slow: clicks
+• Bump Fast: clicks
+• Rebound Slow: clicks
+• Rebound Fast: clicks
+
+[AERO BALANCE]
+• Ride Height Front: mm
+• Ride Height Rear: mm
+• Rear Wing: car-specific steps
+• Splitter: some cars only
+• Brake Duct Front: 0–6
+• Brake Duct Rear: 0–6
+`,
+
+  pmr: `
+PROJECT MOTOR RACING — SETUP SCHEMA (no verified parameter list available)
+This simulator's setup screens are not documented here. Typical groups on a modern GT / prototype setup screen:
+[TYRES] pressures per corner
+[ALIGNMENT] camber, toe, caster
+[AERO] wing / splitter / ride heights
+[SUSPENSION] springs, anti-roll bars, bump stops
+[DAMPERS] bump / rebound (slow, fast)
+[BRAKES] bias, pressure, ducts
+[DRIVETRAIN] differential (preload / power / coast), gearing, final drive
+[ELECTRONICS] TC / ABS / engine map (only where the car has them)
+Do not state numeric limits you are not sure of. Use the units shown in-game; where you cannot know the scale of a slider, give the direction and size of the change relative to the car's default instead of an absolute number. Always finish with a '⚠ Verify in game' list.
+`,
 };
+
+// Games whose schema text is approximate (ranges are hints, not exact limits).
+var APPROX_SCHEMA_GAMES = { f1_25: 1, acc: 1, pmr: 1 };
 
 function getSetupSchema(gameKey) {
   return GAME_SETUP_PARAMS[gameKey] || "";
@@ -2160,6 +2329,16 @@ function App() {
     } catch(e) { return "control"; }
   });
   var ragArm = _ragArm[0];
+  // Pre-session notes from the driver ("what do you want fixed?")
+  var _dn = useState(""); var driverNotes = _dn[0]; var setDriverNotes = _dn[1];
+  // ── Engineer memory + verified car profiles ───────────────────────────────
+  var _mem = useState(function() { return PW.memory.empty(); }); var memory = _mem[0]; var setMemory = _mem[1];
+  var memoryRef = useRef(memory);
+  var _profiles = useState({}); var profiles = _profiles[0]; var setProfiles = _profiles[1];
+  var _cloud = useState({ memory: null, profiles: null, memoryMissing: false, profilesMissing: false }); var cloud = _cloud[0]; var setCloud = _cloud[1];
+  var cloudOkRef = useRef({ memory: true, profiles: true });
+  var memSaveTimer = useRef(null);
+  var _teach = useState(null); var teach = _teach[0]; var setTeach = _teach[1];
   // Manual setup edits: { "msgIdx:tTblIdx:ri": newValue }
   var _editMode = useState(false); var editMode = _editMode[0]; var setEditMode = _editMode[1];
   var _manualEdits = useState({}); var manualEdits = _manualEdits[0]; var setManualEdits = _manualEdits[1];
@@ -2192,6 +2371,24 @@ function App() {
   var _chatView = useState("live"); var chatView = _chatView[0]; var setChatView = _chatView[1];
 
   useEffect(function() { if (user) { loadSetups(); loadMods(); loadApprovalStatus(); } }, [user]);
+  // Load the engineer's memory and the shared car profiles (cloud table if it exists, otherwise this device)
+  useEffect(function() {
+    if (!user) return;
+    var alive = true;
+    PW.store.loadMemory(window.sb, user.id).then(function(r) {
+      if (!alive) return;
+      if (r.missing) cloudOkRef.current.memory = false;
+      memoryRef.current = r.mem; setMemory(r.mem);
+      setCloud(function(c) { return Object.assign({}, c, { memory: r.source, memoryMissing: !!r.missing }); });
+    });
+    PW.store.loadProfiles(window.sb).then(function(r) {
+      if (!alive) return;
+      if (r.missing) cloudOkRef.current.profiles = false;
+      setProfiles(r.profiles);
+      setCloud(function(c) { return Object.assign({}, c, { profiles: r.source, profilesMissing: !!r.missing }); });
+    });
+    return function() { alive = false; };
+  }, [user ? user.id : null]);
   useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
   useEffect(function() {
     var justFinishedLoading = prevLoadingRef.current && !loading;
@@ -2213,8 +2410,6 @@ function App() {
     // While streaming, follow the output at the bottom so the user can watch it arrive.
     if (loading && chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
-  useEffect(function() { setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }, [game]);
-  useEffect(function() { setSelectedCars([]); setCarFilter(""); }, [category]);
   useEffect(function() {
     if (toast) { var t = setTimeout(function() { setToast(null); }, 2800); return function() { clearTimeout(t); }; }
   }, [toast]);
@@ -2823,6 +3018,10 @@ function App() {
     setManualEdits(s.manualEdits || {});
     setEditMode(false);
     setActiveSetupSrc(s);   // keep the raw setup as fallback for sidebar labels
+    sessionSetupIdRef.current = String(s.id);   // ratings and lessons must attach to THIS setup
+    setInlineRating({ stars: null, tag: null, submitted: false });
+    setSetupRatings([]);
+    loadSetupRatings(s.id);
     setStep("chat");
     setSelectedSetup(null);
   }
@@ -2840,6 +3039,9 @@ function App() {
 
   function toggleCar(car) { setSelectedCars(function(p) { return p.includes(car) ? p.filter(function(c) { return c !== car; }) : p.concat([car]); }); }
   function selAll() { setSelectedCars(selectedCars.length === allCars.length ? [] : allCars.slice()); }
+  // Changing the simulator/category clears what depends on it (done here, not in effects, so restoring a saved session keeps its selection)
+  function selectGame(k) { if (k === game) return; setGame(k); setCategory(""); setSelectedCars([]); setTrack(""); setTrackFilter(""); setCarFilter(""); }
+  function selectCategory(k) { if (k === category) return; setCategory(k); setSelectedCars([]); setCarFilter(""); }
   var canGo = game && category && selectedCars.length > 0 && track && condition;
 
   // ── TELEMETRY PARSER ────────────────────────────────────────────────────────
@@ -3077,38 +3279,58 @@ function App() {
     }
   }
 
-  function buildSystemPrompt(ragContext) {
-    var g = getEffectiveGame(game);
-    var gameName = g ? g.name : (game || "Sim Racing");
-    var catName = getCategoryName();
-    var schema = getSetupSchema(game);
-    var sessionPart = sessionType === "qualifying"
+  // ── PROMPT ASSEMBLY ──────────────────────────────────────────────────────────
+  // Layer 1 (constant during a session → cached by Anthropic): persona, session facts, game schema,
+  //   verified car profiles, output rules.
+  // Layer 2 (changes between calls → never cached): engineer memory, reference setup, telemetry, retrieved knowledge.
+  function sessionCtx() {
+    var fb = activeSetupSrc || {};
+    var gk = game || fb.gameKey || "";
+    var g = getEffectiveGame(gk);
+    return {
+      game: gk, gameName: g ? g.name : (fb.game || gk || "Sim Racing"),
+      cat: category || fb.categoryKey || "", catName: category ? getCategoryName() : (fb.category || "Custom"),
+      cars: selectedCars.length ? selectedCars.slice() : (fb.cars || []),
+      track: track || fb.track || "", cond: condition || fb.condition || "Dry", sess: sessionType || fb.sessionType || "race",
+    };
+  }
+  function currentSetupId() { return activeSetupSrc ? activeSetupSrc.id : sessionSetupIdRef.current; }
+
+  function carProfilesBlock(ctx) {
+    if (!ctx.cars.length) return "";
+    var have = [], missing = [];
+    ctx.cars.forEach(function(car) { var p = profiles[PW.profile.key(ctx.game, car)]; if (p) have.push(p); else missing.push(car); });
+    var parts = have.map(function(p) { return PW.profile.format(p); });
+    if (missing.length) parts.push("NO VERIFIED PARAMETER PROFILE for: " + missing.join(", ") + ". The generic schema may list parameters this car does not expose. Use only parameters you are confident this car has, and finish your answer with a short '⚠ Verify in game' list naming any parameter you were unsure about, so the driver can confirm it (the app remembers the answer).");
+    return "\n\n" + parts.join("\n\n");
+  }
+
+  function buildSystemBlocks(ragContext, ctx, isFirst) {
+    var g = getEffectiveGame(ctx.game);
+    var schema = getSetupSchema(ctx.game);
+    var approx = !!APPROX_SCHEMA_GAMES[ctx.game];
+    var sessionPart = ctx.sess === "qualifying"
       ? "This is a QUALIFYING setup — maximize single-lap peak performance. Prioritize grip and minimal drag for this circuit layout."
       : "This is a RACE setup — balance performance with tyre life and fuel consumption across " + (raceLaps > 0 ? raceLaps + " laps" : "the full race distance") + ".";
-    var stratPart = (sessionType === "race" && Number(raceLaps) > 0)
+    var stratPart = (ctx.sess === "race" && Number(raceLaps) > 0)
       ? "\n\nPIT STRATEGY: Include a recommended pit stop strategy for " + raceLaps + " laps: number of stops, ideal stop windows (lap numbers), tyre compound choices per stint, and fuel-saving considerations."
       : "";
-    var telemCtx = buildTelemetryContext();
-    var telemNote = telemCtx ? "\n\nTELEMETRY AVAILABLE — ground every recommendation in the actual data. Reference specific lap numbers, channel values, and trends when explaining changes." : "";
-
     var schemaBlock = schema
-      ? "\n\n" + schema + "\nCRITICAL RULES:\n1. ONLY suggest parameters that exist in the schema above for this game.\n2. Use the EXACT parameter names listed — not paraphrases.\n3. Stay strictly within the stated value ranges. Never suggest values outside them.\n4. Skip parameters marked as greyed-out/unavailable in game for the chosen car category.\n5. For AMS2 Downforce: values are wing steps 0–60. Default formula baseline is ~42. NEVER suggest single-digit downforce values.\n"
+      ? "\n\n" + schema + "\nCRITICAL RULES:\n1. ONLY suggest parameters that exist in the schema above for this game (a verified car profile below overrides the schema).\n2. Use the EXACT parameter names listed — not paraphrases.\n3. " + (approx ? "The ranges above are approximate: stay inside the car's real in-game limits, and prefer the limits of a verified profile when one exists." : "Stay strictly within the stated value ranges. Never suggest values outside them.") + "\n4. Skip parameters marked as greyed-out/unavailable in game for the chosen car category.\n" + (ctx.game === "ams2" ? "5. For AMS2 Downforce: values are wing steps 0–60. Default formula baseline is ~42. NEVER suggest single-digit downforce values.\n" : "")
+      : "";
+    var modNote = (!g || !g.categories[ctx.cat])
+      ? "\n\nNOTE: This is a MOD/custom car category (\"" + ctx.catName + "\"). Provide a comprehensive generic sim racing setup covering all typical adjustable parameters: aerodynamics, suspension geometry, dampers, springs, anti-roll bars, differential, brakes, and tyres. Adapt recommendations to the car description provided."
       : "";
 
-    // For MOD cars without schema, add a generic note
-    var modNote = (!g || !g.categories[category])
-      ? "\n\nNOTE: This is a MOD/custom car category (\"" + catName + "\"). Provide a comprehensive generic sim racing setup covering all typical adjustable parameters: aerodynamics, suspension geometry, dampers, springs, anti-roll bars, differential, brakes, and tyres. Adapt recommendations to the car description provided."
-      : "";
-
-    return [
-      'You are an elite sim racing setup engineer with expert knowledge of "' + gameName + '".',
+    var staticText = [
+      'You are an elite sim racing setup engineer with expert knowledge of "' + ctx.gameName + '".',
       "",
-      "SESSION: " + gameName + " | " + catName + " | Cars: " + selectedCars.join(", ") + " | Track: " + track + " | Conditions: " + condition,
+      "SESSION: " + ctx.gameName + " | " + ctx.catName + " | Cars: " + ctx.cars.join(", ") + " | Track: " + ctx.track + " | Conditions: " + ctx.cond,
       sessionPart,
       stratPart,
       schemaBlock,
+      carProfilesBlock(ctx),
       modNote,
-      telemNote,
       "",
       "OUTPUT FORMAT RULES:",
       "1. Use the tab/group structure from the game UI as section headers (## Tab Name → ### Group Name).",
@@ -3120,52 +3342,116 @@ function App() {
       "   This replicates the in-game help text and helps the driver understand what to change.",
       "4. For feedback/follow-up: Acknowledge the issue → explain root cause → state exact parameter changes → explain effect → list interaction warnings.",
       "5. One setup per car if multiple cars selected.",
-    ].join("\n") + telemCtx
-    // Phase 1: Inject curated knowledge base (RAG) when available
-    + (ragContext
-        ? "\n\n---\n\nKNOWLEDGE BASE — The following excerpts were retrieved from our curated knowledge base of real setups, engineer notes and community data. Use them as reference material — ground your specific parameter values in this data wherever possible, and cite the source when you do:\n\n" + ragContext
-        : "");
+      "6. If the driver says a parameter is missing, locked or out of range, accept it as fact: never use it again and propose another way to get the same effect.",
+    ].join("\n");
+
+    var dyn = [];
+    var memBlock = PW.memory.formatBlock(PW.memory.recall(memoryRef.current, ctx));
+    if (memBlock) dyn.push(memBlock);
+    if (isFirst) { var ref = PW.memory.formatBaseline(PW.memory.bestBaseline(memoryRef.current, ctx)); if (ref) dyn.push(ref); }
+    var telemCtx = buildTelemetryContext();
+    if (telemCtx) dyn.push("TELEMETRY AVAILABLE — ground every recommendation in the actual data. Reference specific lap numbers, channel values, and trends when explaining changes." + telemCtx);
+    if (ragContext) dyn.push("KNOWLEDGE BASE — The following excerpts were retrieved from our curated knowledge base of real setups, engineer notes and community data. Use them as reference material — ground your specific parameter values in this data wherever possible, and cite the source when you do:\n\n" + ragContext);
+
+    var blocks = [{ type: "text", text: staticText, cache_control: { type: "ephemeral" } }];
+    if (dyn.length) blocks.push({ type: "text", text: dyn.join("\n\n---\n\n") });
+    return blocks;
   }
 
-  async function sendMsg(msg) {
-    if (!msg.trim()) return;
-    var nm = messages.concat([{ role: "user", content: msg }]);
-    setMessages(nm); setInput(""); setLoading(true);
-    var am = nm.map(function(m) { return { role: m.role, content: m.content }; });
-    if (nm.length === 1) am[0].content = "[Driver]: " + msg;
-    // ── Fase 0: Tier switching ────────────────────────────────────────────────
-    // First generation (nm.length <= 2): Sonnet — maximum quality for the baseline setup.
-    // Follow-ups (nm.length > 2): Haiku 4.5 — 1/3 do custo, qualidade equivalente para ajustes.
-    var isFollowup = nm.length > 2;
-    var model = isFollowup ? "claude-haiku-4-5" : "claude-sonnet-5";
-    // Phase 0: max_tokens reduced from 10000 → 6000 on first generation (responses remain complete)
-    var maxTok = isFollowup ? 4000 : 6000;
-    var setupId = (activeSetupSrc ? activeSetupSrc.id : null) || Date.now().toString();
+  // ── ENGINEER MEMORY: learn from every exchange and every rating ──────────────
+  function commitMemory(next) {
+    memoryRef.current = next; setMemory(next);
+    if (!user) return;
+    clearTimeout(memSaveTimer.current);
+    memSaveTimer.current = setTimeout(function() {
+      PW.store.saveMemory(window.sb, user.id, memoryRef.current, cloudOkRef.current.memory).then(function(r) {
+        if (r && r.missing) cloudOkRef.current.memory = false;
+        setCloud(function(c) { return Object.assign({}, c, { memory: r.source, memoryMissing: !!(r && r.missing) || c.memoryMissing }); });
+      });
+    }, 700);
+  }
 
-    // ── Phase 1: RAG retrieval (A/B arm) ─────────────────────────────────────
-    // Only on first setup (not follow-ups) and only if the user is in the "rag" arm.
-    // Silent failure — never blocks setup generation.
+  // nm = the conversation including the driver's latest message; engineerText = the reply to it.
+  function learnFromExchange(nm, engineerText, ctx, setupId) {
+    var real = nm.filter(function(m) { return !m.error && !m.manual; });
+    if (real.length < 3) return;
+    var driver = real[real.length - 1].content;
+    var prevDriver = "", prevEngineer = "", baselineOnly = false;
+    if (real.length >= 5) { prevDriver = real[real.length - 3].content; prevEngineer = real[real.length - 2].content; }
+    else baselineOnly = true;
+    var req = PW.distill.buildRequest({
+      ctx: ctx, driver: driver, engineer: engineerText, prevDriver: prevDriver, prevEngineer: prevEngineer, baselineOnly: baselineOnly,
+      existing: PW.memory.recall(memoryRef.current, ctx, { max: 12 }), model: PW_MODELS.extract,
+    });
+    req._setup_id = setupId; req._user_id = user ? user.id : null;
+    callClaude(req).then(function(d) {
+      var parsed = PW.distill.parseResponse(PW.sync.textOf(d.content));
+      if (!parsed) return;
+      var mem = memoryRef.current;
+      if (parsed.previousOutcome !== "none") mem = PW.memory.resolvePending(mem, setupId, parsed.previousOutcome).mem;
+      var r = PW.memory.add(mem, parsed.lessons.map(function(l) { return { kind: l.kind, scope: l.scope, text: l.text, params: l.params, pending: true }; }), ctx, setupId);
+      commitMemory(r.mem);
+      if (r.added.length || r.merged || parsed.previousOutcome !== "none") {
+        setToast("Engineer memory updated" + (r.added.length ? " · " + r.added.length + " new lesson" + (r.added.length > 1 ? "s" : "") : ""));
+      }
+    }).catch(function(e) { console.warn("[memory] lesson extraction failed:", e.message); });
+  }
+
+  // A rating is the driver's verdict on the latest revision.
+  function learnFromRating(stars, tag) {
+    var sid = String(currentSetupId() || ""); if (!sid) return;
+    var ctx = sessionCtx(); var mem = memoryRef.current;
+    mem = PW.memory.resolvePending(mem, sid, stars >= 4 ? "worked" : stars <= 2 ? "failed" : "partial").mem;
+    if (stars >= 4) {
+      mem = PW.memory.addBaseline(mem, { setupId: sid, game: ctx.game, cat: ctx.cat, cars: ctx.cars, track: ctx.track, cond: ctx.cond, sess: ctx.sess, stars: stars, tag: tag, params: PW.paramsFromMessages(messages) });
+    }
+    if (stars <= 2 && tag && tag !== "perfect") {
+      mem = PW.memory.add(mem, [{ kind: "avoid", scope: "track", outcome: "failed", text: "The last revision for this car and track was rated " + stars + "★ (" + tag + "): it did not fix the " + tag + " problem — change the approach instead of repeating the last adjustments." }], ctx, sid).mem;
+    }
+    commitMemory(mem);
+  }
+
+  function saveProfileFor(profile) {
+    return PW.store.saveProfile(window.sb, user ? user.id : "", profile, cloudOkRef.current.profiles).then(function(r) {
+      if (r.missing) cloudOkRef.current.profiles = false;
+      setProfiles(r.profiles);
+      setCloud(function(c) { return Object.assign({}, c, { profiles: r.source, profilesMissing: !!r.missing || c.profilesMissing }); });
+      return r;
+    });
+  }
+  function deleteProfileFor(key) {
+    return PW.store.deleteProfile(window.sb, key, cloudOkRef.current.profiles).then(function(r) { setProfiles(r.profiles); return r; });
+  }
+
+  // baseMessages: defaults to the current conversation; startSession passes [] because React state is not updated yet.
+  async function sendMsg(msg, baseMessages) {
+    if (!msg.trim()) return;
+    var nm = (baseMessages || messages).concat([{ role: "user", content: msg }]);
+    setMessages(nm); setInput(""); setLoading(true);
+    var am = nm.filter(function(m) { return !m.error; }).map(function(m) { return { role: m.role, content: m.content }; });
+    if (nm.length === 1) am[0].content = "[Driver]: " + msg;
+    // Tier switching: the first generation uses the strongest model, follow-ups the cheaper one.
+    var isFollowup = nm.length > 2;
+    var model = isFollowup ? PW_MODELS.adjust : PW_MODELS.build;
+    var maxTok = isFollowup ? 4000 : 6000;
+    var ctx = sessionCtx();
+    var setupId = String(currentSetupId() || Date.now());
+
+    // RAG retrieval (A/B arm): first generation only; silent failure — never blocks setup generation.
     var ragContext = "";
     if (!isFollowup && ragArm === "rag") {
       try {
-        var gKey = game || (activeSetupSrc && activeSetupSrc.gameKey) || "";
-        ragContext = await fetchRAGContext(msg, gKey, category, track, condition);
+        ragContext = await fetchRAGContext(msg, ctx.game, category, track, condition);
         if (ragContext) console.log("[RAG] context retrieved (" + ragContext.length + " chars)");
       } catch(ragErr) {
         console.warn("[RAG] retrieval failed silently:", ragErr.message);
       }
     }
 
-    // ── Fase 0: Prompt caching ────────────────────────────────────────────────
-    // System prompt as an array with cache_control → Anthropic caches the schema tokens
-    // em cache por 5 min. Economia de ~90% nos ~3k tokens de schema por chamada.
-    var systemPromptText = buildSystemPrompt(ragContext);
-    var systemBlock = [{ type: "text", text: systemPromptText, cache_control: { type: "ephemeral" } }];
-
     var payload = {
       model: model,
       max_tokens: maxTok,
-      system: systemBlock,
+      system: buildSystemBlocks(ragContext, ctx, !isFollowup),
       messages: am,
       // Private metadata for proxy logging (stripped before forwarding to Anthropic)
       _setup_id:    setupId,
@@ -3174,17 +3460,18 @@ function App() {
       _rag_arm:     ragArm,
       _rag_used:    ragContext.length > 0,
     };
-    fetch(window.SB_URL + "/functions/v1/anthropic-proxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "apikey": window.SB_KEY },
-      body: JSON.stringify(payload)
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d.error) throw new Error((typeof d.error === "object" ? d.error.message : d.error) || JSON.stringify(d.error));
-      var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
+    try {
+      var d = await callClaude(payload);
+      var txt = PW.sync.textOf(d.content);
       if (!txt) throw new Error("Empty response. Confirm that the ANTHROPIC_API_KEY secret is configured in Edge Functions → Secrets on Supabase.");
+      if (d.stop_reason === "max_tokens") txt += "\n\n⚠ The answer reached the length limit and may be incomplete — ask the engineer to continue.";
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
-    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Error: " + e.message }]); }); })
-    .finally(function() { setLoading(false); });
+      if (isFollowup) learnFromExchange(nm, txt, ctx, setupId);
+    } catch (e) {
+      setMessages(function(p) { return p.concat([{ role: "assistant", content: "Error: " + e.message, error: true }]); });
+    } finally {
+      setLoading(false);
+    }
   }
 
   function startSession() {
@@ -3196,9 +3483,10 @@ function App() {
     setSetupRatings([]);
     setChatView("live");
     setStep("chat"); setMessages([]); setManualEdits({}); setEditMode(false); setActiveSetupSrc(null);
+    var notes = (driverNotes || "").trim().slice(0, 600);
     setTimeout(function() {
       var sTypeTxt = sessionType === "qualifying" ? "qualifying (single-lap)" : "race (" + (Number(raceLaps) > 0 ? raceLaps + " laps" : "full distance") + ")";
-      sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + gameName + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : ""));
+      sendMsg("Provide a complete baseline setup for " + sTypeTxt + " in " + condition.toLowerCase() + " conditions at " + track + ". " + (selectedCars.length > 1 ? "Separate setups for: " + selectedCars.join(", ") + "." : "Car: " + selectedCars[0] + ".") + " Include every adjustable parameter available in " + gameName + "." + (sessionType === "race" && Number(raceLaps) > 0 ? " Also include a recommended pit stop strategy for " + raceLaps + " laps." : "") + (notes ? " Driver notes (priority — address these in the baseline): " + notes : ""), []);
     }, 80);
   }
 
@@ -3212,7 +3500,9 @@ function App() {
     setChatView("live");
     var catName = getCategoryName();
     var sTypeTxt = sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " (" + raceLaps + " laps)" : "");
-    var placeholder = "## MANUAL SETUP\n\n**Simulator:** " + gameName + "\n**Category:** " + catName + "\n**Car(s):** " + selectedCars.join(", ") + "\n**Track:** " + track + "\n**Conditions:** " + condition + "\n**Session:** " + sTypeTxt + "\n\n---\n\n_This setup was created manually. Edit any parameter below by clicking on it in Edit Mode._\n\n### Aerodynamics\n| Parameter | Value |\n|---|---|\n| Front Wing | — |\n| Rear Wing | — |\n\n### Suspension\n| Parameter | Value |\n|---|---|\n| Front Ride Height | — |\n| Rear Ride Height | — |\n| Front Spring Rate | — |\n| Rear Spring Rate | — |\n| Front Damper | — |\n| Rear Damper | — |\n| Front Anti-Roll Bar | — |\n| Rear Anti-Roll Bar | — |\n\n### Tyres\n| Parameter | Value |\n|---|---|\n| Front Tyre Pressure | — |\n| Rear Tyre Pressure | — |\n| Front Camber | — |\n| Rear Camber | — |\n| Front Toe | — |\n| Rear Toe | — |\n\n### Differential\n| Parameter | Value |\n|---|---|\n| Preload | — |\n| Power | — |\n| Coast | — |\n\n### Brakes\n| Parameter | Value |\n|---|---|\n| Brake Bias | — |\n| Brake Pressure | — |";
+    // The template lists the car's real parameters: its verified profile if taught, else the simulator's schema.
+    var prof = selectedCars.length === 1 ? (profiles[PW.profile.key(game, selectedCars[0])] || null) : null;
+    var placeholder = PW.manualTemplate({ gameName: gameName, catName: catName, cars: selectedCars, track: track, cond: condition, sessLabel: sTypeTxt }, prof, getSetupSchema(game));
     setStep("chat");
     setMessages([{ role: "assistant", content: placeholder, manual: true }]);
     setManualEdits({});
@@ -3670,23 +3960,30 @@ function App() {
   function loadSetupRatings(setupId) {
     if (!window.sb || !setupId) return;
     window.sb.from("setup_ratings").select("stars,tag,user_id").eq("setup_id", setupId)
-      .then(function(res) { if (!res.error && res.data) setSetupRatings(res.data); });
+      .then(function(res) {
+        if (res.error || !res.data) return;
+        setSetupRatings(res.data);
+        var own = user ? res.data.filter(function(r) { return r.user_id === user.id; })[0] : null;
+        if (own) setInlineRating({ stars: own.stars, tag: own.tag, submitted: true });
+      });
   }
 
   function submitInlineRating(stars, tag) {
-    var sid = sessionSetupIdRef.current;
+    var sid = currentSetupId();
     setInlineRating({ stars: stars, tag: tag, submitted: true });
-    if (!window.sb || !user || !sid) return;
-    window.sb.from("setup_ratings").upsert({
-      setup_id: sid,
-      user_id: user.id,
-      stars: stars,
-      tag: tag || null,
-    }, { onConflict: "setup_id,user_id" }).then(function(res) {
-      if (res.error) console.warn("rating save:", res.error.message);
-      else loadSetupRatings(sid);
-    });
-    setToast("Rating saved! " + stars + "★" + (tag ? " · " + tag : ""));
+    learnFromRating(stars, tag);
+    if (window.sb && user && sid) {
+      window.sb.from("setup_ratings").upsert({
+        setup_id: String(sid),
+        user_id: user.id,
+        stars: stars,
+        tag: tag || null,
+      }, { onConflict: "setup_id,user_id" }).then(function(res) {
+        if (res.error) console.warn("rating save:", res.error.message);
+        else loadSetupRatings(sid);
+      });
+    }
+    setToast("Rating saved! " + stars + "★" + (tag ? " · " + tag : "") + " — the engineer will remember it");
   }
 
   // Toast
@@ -3734,7 +4031,7 @@ function App() {
           {Object.entries(GAMES).map(function(e2) {
             var k = e2[0]; var g = e2[1]; var sel = game === k;
             return (
-              <button key={k} onClick={function() { setGame(k); setMobileConfigPanel(0); }} style={{ padding: "5px 14px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 12 : 11, fontWeight: sel ? 700 : 400, letterSpacing: 0.5 }}>
+              <button key={k} onClick={function() { selectGame(k); setMobileConfigPanel(0); }} style={{ padding: "5px 14px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 12 : 11, fontWeight: sel ? 700 : 400, letterSpacing: 0.5 }}>
                 {isMobile ? (g.short || g.name) : g.name}
               </button>
             );
@@ -3773,7 +4070,7 @@ function App() {
                     var builtIn = Object.entries(cg.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
                       var k = e2[0]; var cat = e2[1]; var sel = category === k;
                       return (
-                        <button key={k} onClick={function() { setCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
+                        <button key={k} onClick={function() { selectCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
                           <span>{cat.name}</span>
                           <span style={{ fontSize: 12, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length + ((customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k].length : 0)}</span>
                         </button>
@@ -3783,7 +4080,7 @@ function App() {
                       var k = e2[0]; var name = e2[1]; var sel = category === k;
                       var cars = (customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k] : [];
                       return (
-                        <button key={k} onClick={function() { setCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? "rgba(168,85,247,0.12)" : "transparent", border: "none", borderLeft: "2px solid " + (sel ? "#c084fc" : "transparent"), color: sel ? "#c084fc" : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
+                        <button key={k} onClick={function() { selectCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? "rgba(168,85,247,0.12)" : "transparent", border: "none", borderLeft: "2px solid " + (sel ? "#c084fc" : "transparent"), color: sel ? "#c084fc" : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
                           <span>{name}</span>
                           <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", marginLeft: 6 }}>MOD {cars.length}</span>
                         </button>
