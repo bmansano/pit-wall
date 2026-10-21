@@ -2701,11 +2701,14 @@ function App() {
     if (!window.sb) return;
     window.sb.from("setups").select("data").eq("id", "__mods__")
       .then(function(res) {
-        setModsLoaded(true);
+        // A failed read keeps what was restored: it is checked after the next successful load.
         if (res.error) { console.error("loadMods:", res.error.message); return; }
+        // Lists first, "loaded" flag second — React (legacy render) does not batch updates made inside a promise,
+        // and the clean-up effect must never see "loaded" together with stale lists.
         if (res.data && res.data.length > 0 && res.data[0].data) {
           setCustomMods(res.data[0].data);
         }
+        setModsLoaded(true);
       });
   }
 
