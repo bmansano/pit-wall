@@ -61,7 +61,7 @@
 <div id="root"></div>
 <script>
 // ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
-// Cole aqui os valores do seu projeto Supabase (Settings → API):
+// Paste your Supabase project values here (Settings → API):
 window.SB_URL  = "https://hugxfbcyyfltloufbgna.supabase.co";
 window.SB_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3hmYmN5eWZsdGxvdWZiZ25hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTE0ODYsImV4cCI6MjA5MTA2NzQ4Nn0.Xn-5ej7WPSwenlu-M5e0OvZiuEATztb7_FUeeAxLZ5Q";
 
@@ -1060,7 +1060,7 @@ function AuthScreen({ onLogin, initialMode }) {
   }
 
   var onSubmit = mode === "login" ? doLogin : mode === "register" ? doRegister : doForgot;
-  var submitLabel = busy ? "..." : mode === "login" ? "ENTRAR" : mode === "register" ? "CRIAR CONTA" : "ENVIAR LINK";
+  var submitLabel = busy ? "..." : mode === "login" ? "SIGN IN" : mode === "register" ? "CREATE ACCOUNT" : "SEND LINK";
 
   return (
     <div style={{ height: "100%", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -1108,20 +1108,20 @@ function AuthScreen({ onLogin, initialMode }) {
         ) : (
           <form onSubmit={onSubmit}>
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>E-MAIL</label>
-              <input type="email" required value={email} onChange={function(e) { setEmail(e.target.value); }} placeholder="seu@email.com"
+              <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>EMAIL</label>
+              <input type="email" required value={email} onChange={function(e) { setEmail(e.target.value); }} placeholder="you@email.com"
                 style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
             </div>
             {mode !== "forgot" && (
               <div style={{ marginBottom: mode === "login" ? 6 : 14 }}>
-                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>SENHA</label>
+                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>PASSWORD</label>
                 <input type="password" required minLength={6} value={password} onChange={function(e) { setPassword(e.target.value); }} placeholder="••••••••"
                   style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
               </div>
             )}
             {mode === "register" && (
               <div style={{ marginBottom: 22 }}>
-                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>CONFIRMAR SENHA</label>
+                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>CONFIRM PASSWORD</label>
                 <input type="password" required minLength={6} value={password2} onChange={function(e) { setPassword2(e.target.value); }} placeholder="••••••••"
                   style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
               </div>
@@ -1178,7 +1178,7 @@ function PendingScreen(props) {
         {props.email && <div style={{ fontSize: 12, color: C.td, marginBottom: 28 }}>{props.email}</div>}
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           {isPending && (
-            <button onClick={props.onRefresh} style={{ padding: "9px 20px", background: "transparent", border: "1px solid " + C.ac, borderRadius: 4, color: C.ac, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>↻ VERIFICAR STATUS</button>
+            <button onClick={props.onRefresh} style={{ padding: "9px 20px", background: "transparent", border: "1px solid " + C.ac, borderRadius: 4, color: C.ac, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>↻ CHECK STATUS</button>
           )}
           <button onClick={props.onSignOut} style={{ padding: "9px 20px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 4, color: C.ts, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>SIGN OUT</button>
         </div>
@@ -1754,7 +1754,7 @@ function App() {
     if (updated) sbUpsertSetup(updated);
     if (selectedSetup && selectedSetup.id === id) setSelectedSetup(Object.assign({}, selectedSetup, { notes: notes }));
     setEditingNotesId(null);
-    setToast("Notas salvas!");
+    setToast("Notes saved!");
   }
 
   function saveCustomMap(trackName, dataUrl) {
@@ -1865,7 +1865,7 @@ function App() {
   }
 
   function deleteBuiltinCat(gameKey, catKey, catName) {
-    if (!confirm("Remover a categoria \"" + catName + "\" da lista?")) return;
+    if (!confirm("Remove the category \"" + catName + "\" from the list?")) return;
     var n = getModBase(customMods, gameKey);
     if (!n[gameKey].builtinCatEdits) n[gameKey].builtinCatEdits = {};
     n[gameKey].builtinCatEdits[catKey] = { deleted: true };
@@ -2056,8 +2056,8 @@ function App() {
         }).then(function(dataUrl) {
           saveCustomMap(trackName, dataUrl);
           setUploadingTrack(null);
-          setToast("Mapa carregado!");
-        }).catch(function() { setToast("Erro ao ler PDF."); setUploadingTrack(null); });
+          setToast("Map loaded!");
+        }).catch(function() { setToast("Could not read the PDF."); setUploadingTrack(null); });
       };
       reader.readAsArrayBuffer(file);
     } else {
@@ -2066,9 +2066,9 @@ function App() {
       reader2.onload = function(e) {
         saveCustomMap(trackName, e.target.result);
         setUploadingTrack(null);
-        setToast("Mapa carregado!");
+        setToast("Map loaded!");
       };
-      reader2.onerror = function() { setToast("Erro ao ler arquivo."); setUploadingTrack(null); };
+      reader2.onerror = function() { setToast("Could not read the file."); setUploadingTrack(null); };
       reader2.readAsDataURL(file);
     }
   }
@@ -2284,13 +2284,13 @@ function App() {
           laps: lapSummaries,
           raw_headers: headers.slice(0, 40),
         });
-        setToast("Telemetria carregada: " + lapSummaries.length + " voltas, " + channelsFound.length + " canais");
+        setToast("Telemetry loaded: " + lapSummaries.length + " laps, " + channelsFound.length + " channels");
       } catch(err) {
         setToast("Error processing telemetry: " + err.message);
       }
       setTelemParsing(false);
     };
-    reader.onerror = function() { setToast("Erro ao ler arquivo."); setTelemParsing(false); };
+    reader.onerror = function() { setToast("Could not read the file."); setTelemParsing(false); };
     reader.readAsText(file);
   }
 
@@ -2363,7 +2363,7 @@ function App() {
              + c.content;
       }).join("\n\n---\n\n");
     } catch(e) {
-      console.warn("[RAG] fetchRAGContext falhou:", e.message);
+      console.warn("[RAG] fetchRAGContext failed:", e.message);
       return "";
     }
   }
@@ -2441,14 +2441,14 @@ function App() {
       try {
         var gKey = game || (activeSetupSrc && activeSetupSrc.gameKey) || "";
         ragContext = await fetchRAGContext(msg, gKey, category, track, condition);
-        if (ragContext) console.log("[RAG] contexto recuperado (" + ragContext.length + " chars)");
+        if (ragContext) console.log("[RAG] context retrieved (" + ragContext.length + " chars)");
       } catch(ragErr) {
-        console.warn("[RAG] retrieval falhou silenciosamente:", ragErr.message);
+        console.warn("[RAG] retrieval failed silently:", ragErr.message);
       }
     }
 
     // ── Fase 0: Prompt caching ────────────────────────────────────────────────
-    // System prompt como array com cache_control → Anthropic armazena os tokens de schema
+    // System prompt as an array with cache_control → Anthropic caches the schema tokens
     // em cache por 5 min. Economia de ~90% nos ~3k tokens de schema por chamada.
     var systemPromptText = buildSystemPrompt(ragContext);
     var systemBlock = [{ type: "text", text: systemPromptText, cache_control: { type: "ephemeral" } }];
@@ -2474,7 +2474,7 @@ function App() {
       var txt = (d.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("\n");
       if (!txt) throw new Error("Empty response. Confirm that the ANTHROPIC_API_KEY secret is configured in Edge Functions → Secrets on Supabase.");
       setMessages(function(p) { return p.concat([{ role: "assistant", content: txt }]); });
-    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Erro: " + e.message }]); }); })
+    }).catch(function(e) { setMessages(function(p) { return p.concat([{ role: "assistant", content: "Error: " + e.message }]); }); })
     .finally(function() { setLoading(false); });
   }
 
@@ -2566,7 +2566,7 @@ function App() {
       // Date
       doc.setTextColor(70, 70, 78);
       doc.setFontSize(6.5);
-      doc.text(new Date(s.ts).toLocaleDateString("pt-BR"), pw - mr, 11, { align: "right" });
+      doc.text(new Date(s.ts).toLocaleDateString("en-GB"), pw - mr, 11, { align: "right" });
 
       // ── SESSION INFO BLOCK (unified) ─────────────────────────────────────
       var infoY = 24;
@@ -2819,9 +2819,9 @@ function App() {
   // ── SHARED HEADER ───────────────────────────────────────────────────────────
   function Header() {
     var tabs = [
-      { key: "config", label: "CONFIG", icon: "🎛", desc: "Configurar" },
-      { key: "chat", label: "ENGENHEIRO", icon: "💬", desc: "IA" },
-      { key: "history", label: "SETUPS", icon: "📋", desc: "Salvos" },
+      { key: "config", label: "CONFIG", icon: "🎛", desc: "Configure" },
+      { key: "chat", label: "ENGINEER", icon: "💬", desc: "AI" },
+      { key: "history", label: "SETUPS", icon: "📋", desc: "Saved" },
     ];
     if (isAdmin) tabs.push({ key: "admin", label: "ADMIN", icon: "🔧", desc: "Admin" });
 
@@ -2904,7 +2904,7 @@ function App() {
             border: "1px solid " + C.bd, borderRadius: 3,
             color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1,
             flexShrink: 0,
-          }}>SAIR</button>
+          }}>SIGN OUT</button>
         </div>
 
         {/* Mobile nav strip (second row) */}
@@ -2957,7 +2957,7 @@ function App() {
     );
   }
 
-  // ── Avaliação inline de setup ────────────────────────────────────────────────
+  // ── Inline setup rating ──────────────────────────────────────────────────────
   function loadSetupRatings(setupId) {
     if (!window.sb || !setupId) return;
     window.sb.from("setup_ratings").select("stars,tag,user_id").eq("setup_id", setupId)
@@ -2994,7 +2994,7 @@ function App() {
   if (!window.sb) return <SupabaseSetupScreen />;
   if (user === undefined) return (
     <div style={{ height: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ fontSize: 9, letterSpacing: 3, color: C.td }}>CARREGANDO...</div>
+      <div style={{ fontSize: 9, letterSpacing: 3, color: C.td }}>LOADING...</div>
     </div>
   );
   if (!user) return <AuthScreen onLogin={function(u) { setUser(u); }} />;
@@ -3003,7 +3003,7 @@ function App() {
   if (!isAdmin) {
     if (approvalStatus === null) return (
       <div style={{ height: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 9, letterSpacing: 3, color: C.td }}>CARREGANDO...</div>
+        <div style={{ fontSize: 9, letterSpacing: 3, color: C.td }}>LOADING...</div>
       </div>
     );
     if (approvalStatus !== "approved") return (
@@ -3304,33 +3304,33 @@ function App() {
                   USERS — {approvalUsers.length} registrations
                   {approvalUsers.filter(function(u) { return u.status === "pending"; }).length > 0 && (
                     <span style={{ marginLeft: 10, color: C.warn }}>
-                      {approvalUsers.filter(function(u) { return u.status === "pending"; }).length} PENDENTES
+                      {approvalUsers.filter(function(u) { return u.status === "pending"; }).length} PENDING
                     </span>
                   )}
                 </div>
-                <button onClick={loadApprovalUsers} style={{ padding: "4px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>↻ ATUALIZAR</button>
+                <button onClick={loadApprovalUsers} style={{ padding: "4px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer" }}>↻ REFRESH</button>
               </div>
-              {approvalUsers.length === 0 && <div style={{ color: C.td, fontSize: 13 }}>Nenhum cadastro encontrado.</div>}
+              {approvalUsers.length === 0 && <div style={{ color: C.td, fontSize: 13 }}>No registrations found.</div>}
               {approvalUsers.map(function(u) {
                 var statusColor = u.status === "approved" ? C.ok : u.status === "rejected" ? C.danger : C.warn;
-                var statusLabel = u.status === "approved" ? "APROVADO" : u.status === "rejected" ? "NEGADO" : "PENDENTE";
+                var statusLabel = u.status === "approved" ? "APPROVED" : u.status === "rejected" ? "DENIED" : "PENDING";
                 return (
                   <div key={u.user_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", marginBottom: 4, background: C.sf, border: "1px solid " + (u.status === "pending" ? "rgba(245,158,11,0.3)" : C.bd), borderRadius: 3 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, color: C.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
                       <div style={{ fontSize: 11, color: C.td, marginTop: 2 }}>
-                        Solicitado em {new Date(u.requested_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        Requested on {new Date(u.requested_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </div>
                     </div>
                     <span style={{ fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid " + statusColor, borderRadius: 2, color: statusColor, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>{statusLabel}</span>
                     {u.status === "pending" && (
                       <>
-                        <button onClick={function() { approveUser(u.user_id); }} style={{ padding: "5px 14px", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 3, color: C.ok, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>APROVAR</button>
-                        <button onClick={function() { rejectUser(u.user_id); }} style={{ padding: "5px 14px", background: "transparent", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 3, color: C.danger, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>NEGAR</button>
+                        <button onClick={function() { approveUser(u.user_id); }} style={{ padding: "5px 14px", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 3, color: C.ok, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>APPROVE</button>
+                        <button onClick={function() { rejectUser(u.user_id); }} style={{ padding: "5px 14px", background: "transparent", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 3, color: C.danger, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>DENY</button>
                       </>
                     )}
                     {u.status !== "pending" && (
-                      <button onClick={function() { revokeUser(u.user_id); }} style={{ padding: "5px 14px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>REVOGAR</button>
+                      <button onClick={function() { revokeUser(u.user_id); }} style={{ padding: "5px 14px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontSize: 10, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>REVOKE</button>
                     )}
                   </div>
                 );
@@ -3343,7 +3343,7 @@ function App() {
             <div style={{ maxWidth: 680 }}>
               {/* Built-in categories — now fully editable */}
               <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 10 }}>
-                CATEGORIAS DO JOGO — {ag ? Object.keys(ag.categories).length : 0} ativas
+                GAME CATEGORIES — {ag ? Object.keys(ag.categories).length : 0} active
               </div>
               {ag && Object.entries(ag.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
                 var k = e2[0]; var cat = e2[1];
@@ -3351,9 +3351,9 @@ function App() {
                 return (
                   <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
                     <EditInline type="bcat" id={k} value={cat.name} onSave={function(v) { renameBuiltinCat(adminGame, k, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
-                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cat.cars.length} carros{modCount > 0 ? " + " + modCount + " MOD" : ""}</span>
-                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>GERENCIAR</button>
-                    <button onClick={function() { deleteBuiltinCat(adminGame, k, cat.name); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }} title="Remover categoria">✕</button>
+                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cat.cars.length} cars{modCount > 0 ? " + " + modCount + " MOD" : ""}</span>
+                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>MANAGE</button>
+                    <button onClick={function() { deleteBuiltinCat(adminGame, k, cat.name); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }} title="Remove category">✕</button>
                   </div>
                 );
               })}
@@ -3361,13 +3361,13 @@ function App() {
               {/* Deleted built-in categories (restorable) */}
               {deletedBuiltinCats.length > 0 && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.danger, marginBottom: 6 }}>REMOVIDAS — clique RESTAURAR para desfazer</div>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.danger, marginBottom: 6 }}>REMOVED — click RESTORE to undo</div>
                   {deletedBuiltinCats.map(function(e2) {
                     var k = e2[0]; var cat = e2[1];
                     return (
                       <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", marginBottom: 2, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 3, opacity: 0.7 }}>
                         <span style={{ flex: 1, fontSize: 13, color: C.td, textDecoration: "line-through" }}>{cat.name}</span>
-                        <button onClick={function() { restoreBuiltinCat(adminGame, k); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.ok, borderRadius: 2, color: C.ok, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>RESTAURAR</button>
+                        <button onClick={function() { restoreBuiltinCat(adminGame, k); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.ok, borderRadius: 2, color: C.ok, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>RESTORE</button>
                       </div>
                     );
                   })}
@@ -3375,8 +3375,8 @@ function App() {
               )}
 
               {/* MOD categories */}
-              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, margin: "20px 0 10px" }}>CATEGORIAS MOD — {Object.keys(agCustomCats).length} adicionadas</div>
-              {Object.keys(agCustomCats).length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 12 }}>Nenhuma categoria MOD.</div>}
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: MOD_PURPLE, margin: "20px 0 10px" }}>MOD CATEGORIES — {Object.keys(agCustomCats).length} added</div>
+              {Object.keys(agCustomCats).length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 12 }}>No MOD categories.</div>}
               {Object.entries(agCustomCats).map(function(e2) {
                 var k = e2[0]; var name = e2[1];
                 var cars = (agMods.categories && agMods.categories[k]) ? agMods.categories[k] : [];
@@ -3384,16 +3384,16 @@ function App() {
                   <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 2, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
                     <ModBadge />
                     <EditInline type="cat" id={k} value={name} onSave={function(v) { renameModCategory(adminGame, k, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
-                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cars.length} carros</span>
-                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>GERENCIAR</button>
-                    <button onClick={function() { if (confirm("Remover categoria \"" + name + "\" e todos os seus carros?")) removeModCategory(adminGame, k); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
+                    <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cars.length} cars</span>
+                    <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>MANAGE</button>
+                    <button onClick={function() { if (confirm("Remove category \"" + name + "\" and all its cars?")) removeModCategory(adminGame, k); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                   </div>
                 );
               })}
 
               <div style={{ marginTop: 16, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
-                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>NOVA CATEGORIA MOD</div>
-                <AdminInput k="newCat" placeholder="Nome da categoria (ex: GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>NEW MOD CATEGORY</div>
+                <AdminInput k="newCat" placeholder="Category name (e.g. GT4 MOD)" onAdd={function(v) { addModCategory(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
               </div>
             </div>
           )}
@@ -3417,13 +3417,13 @@ function App() {
               {adminCat && adminCatObj && (
                 <div>
                   <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 12 }}>
-                    CARROS — {adminCatObj.name}
+                    CARS — {adminCatObj.name}
                   </div>
 
                   {/* Built-in cars — now editable */}
                   {adminCatObj.builtIn && (
                     <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.ts, marginBottom: 6 }}>DO JOGO — {builtInCarsForAdminCat.length} carros</div>
+                      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.ts, marginBottom: 6 }}>BUILT-IN — {builtInCarsForAdminCat.length} cars</div>
                       {builtInCarsForAdminCat.map(function(car) {
                         return (
                           <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 2 }}>
@@ -3433,15 +3433,15 @@ function App() {
                         );
                       })}
                       <div style={{ marginTop: 8, padding: "12px", background: C.sfc, border: "1px solid " + C.bd, borderRadius: 3 }}>
-                        <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADICIONAR CARRO À LISTA DO JOGO</div>
-                        <AdminInput k="newBuiltinCar" placeholder="Nome do carro (ex: Ferrari 296 GT3)" onAdd={function(v) { addBuiltinCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                        <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD CAR TO BUILT-IN LIST</div>
+                        <AdminInput k="newBuiltinCar" placeholder="Car name (e.g. Ferrari 296 GT3)" onAdd={function(v) { addBuiltinCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                       </div>
                     </div>
                   )}
 
                   {/* MOD cars */}
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 6 }}>CARROS MOD — {modCarsForAdminCat.length} adicionados</div>
-                  {modCarsForAdminCat.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>Nenhum carro MOD.</div>}
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: MOD_PURPLE, marginBottom: 6 }}>MOD CARS — {modCarsForAdminCat.length} added</div>
+                  {modCarsForAdminCat.length === 0 && <div style={{ color: C.td, fontSize: 13, marginBottom: 10 }}>No MOD cars.</div>}
                   {modCarsForAdminCat.map(function(car) {
                     return (
                       <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 2, background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 3 }}>
@@ -3452,8 +3452,8 @@ function App() {
                     );
                   })}
                   <div style={{ marginTop: 8, padding: "12px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
-                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: MOD_PURPLE, marginBottom: 4 }}>ADICIONAR CARRO MOD</div>
-                    <AdminInput k="newCar" placeholder="Nome do carro (ex: Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: MOD_PURPLE, marginBottom: 4 }}>ADD MOD CAR</div>
+                    <AdminInput k="newCar" placeholder="Car name (e.g. Porsche 997 GT3 Cup)" onAdd={function(v) { addModCar(adminGame, adminCat, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                   </div>
                 </div>
               )}
@@ -3467,7 +3467,7 @@ function App() {
               {/* Left: Built-in tracks — now editable */}
               {ag && (
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>PISTAS DO JOGO — {agBuiltinTracks.length}</div>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>BUILT-IN TRACKS — {agBuiltinTracks.length}</div>
                   <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf, overflowY: "auto", flex: 1 }}>
                     {agBuiltinTracks.map(function(t) {
                       return (
@@ -3479,8 +3479,8 @@ function App() {
                     })}
                   </div>
                   <div style={{ marginTop: 8, padding: "12px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
-                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADICIONAR PISTA DO JOGO</div>
-                    <AdminInput k="newBuiltinTrack" placeholder="Nome da pista (ex: Monza)" onAdd={function(v) { addBuiltinTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD TRACK TO BUILT-IN LIST</div>
+                    <AdminInput k="newBuiltinTrack" placeholder="Track name (e.g. Monza)" onAdd={function(v) { addBuiltinTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                   </div>
                 </div>
               )}
@@ -3571,7 +3571,7 @@ function App() {
                         {uploadingTrack === selectedSetup.track ? "..." : "↑ UPLOAD"}
                         <input type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) handleMapUpload(selectedSetup.track, e.target.files[0]); e.target.value = ""; }} />
                       </label>
-                      {_isCustomMap && <button onClick={function() { removeCustomMap(selectedSetup.track); }} title="Remover mapa customizado" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: 0 }}>✕</button>}
+                      {_isCustomMap && <button onClick={function() { removeCustomMap(selectedSetup.track); }} title="Remove custom map" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: 0 }}>✕</button>}
                       {!_isCustomMap && _mapSvg && _mapSvg !== "NOT_FOUND" && (
                         <button onClick={function() {
                           setTrackMaps(function(prev) { var n = Object.assign({}, prev); delete n[_mapKey2]; try { localStorage.setItem("pitwall_trackmaps", JSON.stringify(n)); } catch(e) {} return n; });
@@ -3584,7 +3584,7 @@ function App() {
                     </div>
                   </div>
                   <div style={{ borderRadius: 4, overflow: "hidden", border: "1px solid " + C.bd, background: "#0a0a0b", height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {(_mapLoading2 || uploadingTrack === selectedSetup.track) && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}><Loader /><span style={{ fontSize: 8, color: C.td, letterSpacing: 1 }}>{uploadingTrack === selectedSetup.track ? "PROCESSANDO" : "LOADING"}</span></div>}
+                    {(_mapLoading2 || uploadingTrack === selectedSetup.track) && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}><Loader /><span style={{ fontSize: 8, color: C.td, letterSpacing: 1 }}>{uploadingTrack === selectedSetup.track ? "PROCESSING" : "LOADING"}</span></div>}
                     {!_mapLoading2 && uploadingTrack !== selectedSetup.track && _mapSvg && _mapSvg !== "NOT_FOUND" && <img src={_mapSvg} alt={selectedSetup.track} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", filter: _isCustomMap ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} />}
                     {_mapSvg === "NOT_FOUND" && <span style={{ fontSize: 10, color: C.td }}>Not found — use ↑ UPLOAD</span>}
                     {!_mapSvg && !_mapLoading2 && uploadingTrack !== selectedSetup.track && <span style={{ fontSize: 10, color: C.td }}>Use ↑ UPLOAD ou WEB</span>}
@@ -3597,10 +3597,10 @@ function App() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                   <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 2, color: C.td }}>TRACK NOTES</span>
                   {editingNotesId !== selectedSetup.id
-                    ? <button onClick={function() { setEditingNotesId(selectedSetup.id); setNotesText(selectedSetup.notes || ""); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1, cursor: "pointer" }}>EDITAR</button>
+                    ? <button onClick={function() { setEditingNotesId(selectedSetup.id); setNotesText(selectedSetup.notes || ""); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1, cursor: "pointer" }}>EDIT</button>
                     : <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={function() { setEditingNotesId(null); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1, cursor: "pointer" }}>CANCELAR</button>
-                        <button onClick={function() { updateSetupNotes(selectedSetup.id, notesText); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>SALVAR</button>
+                        <button onClick={function() { setEditingNotesId(null); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, letterSpacing: 1, cursor: "pointer" }}>CANCEL</button>
+                        <button onClick={function() { updateSetupNotes(selectedSetup.id, notesText); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>SAVE</button>
                       </div>
                   }
                 </div>
@@ -3704,7 +3704,7 @@ function App() {
                         <div style={{ fontSize: 14, color: C.ts, marginBottom: 8 }}>{s.category}</div>
                         <div style={{ fontSize: 13, color: C.tm, marginBottom: 10 }}>{s.cars.slice(0, 2).join(", ")}{s.cars.length > 2 ? " +" + (s.cars.length - 2) + " more" : ""}</div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTop: "1px solid " + C.bd }}>
-                          <span style={{ fontSize: 12, color: C.td }}>{new Date(s.ts).toLocaleDateString("pt-BR")}</span>
+                          <span style={{ fontSize: 12, color: C.td }}>{new Date(s.ts).toLocaleDateString("en-GB")}</span>
                           <span style={{ fontSize: 12, color: s.condition === "Wet" ? "#60a5fa" : C.tm }}>{s.condition}</span>
                         </div>
                       </div>
@@ -3793,7 +3793,7 @@ function App() {
                         <input type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) handleMapUpload(mapTrack, e.target.files[0]); e.target.value = ""; }} />
                       </label>
                       {/* Clear custom */}
-                      {isCustom && <button onClick={function() { removeCustomMap(mapTrack); }} title="Remover mapa customizado" style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 9, cursor: "pointer" }}>✕</button>}
+                      {isCustom && <button onClick={function() { removeCustomMap(mapTrack); }} title="Remove custom map" style={{ padding: "2px 6px", background: "transparent", border: "none", color: C.td, fontSize: 9, cursor: "pointer" }}>✕</button>}
                       {/* Wikimedia fetch (only if no custom) */}
                       {!isCustom && !wikimediaUrl && !loading2 && (
                         <button onClick={function() { fetchTrackMap(mapGame, mapTrack); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.tm, fontSize: 7, letterSpacing: 0.5 }}>WEB</button>
@@ -3804,10 +3804,10 @@ function App() {
                     </div>
                   </div>
                   <div style={{ padding: "0 10px 10px" }}>
-                    {(loading2 || isUploading) && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>{isUploading ? "PROCESSANDO" : "SEARCHING CIRCUIT"}</span></div>}
+                    {(loading2 || isUploading) && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>{isUploading ? "PROCESSING" : "SEARCHING CIRCUIT"}</span></div>}
                     {!loading2 && !isUploading && displayUrl && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={displayUrl} alt={mapTrack} style={{ width: "100%", height: "auto", display: "block", filter: isCustom ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
                     {!loading2 && !isUploading && !displayUrl && wikimediaUrl === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Not found. Use ↑ UPLOAD.</div>}
-                    {!loading2 && !isUploading && !displayUrl && wikimediaUrl !== "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Use ↑ UPLOAD ou WEB</div>}
+                    {!loading2 && !isUploading && !displayUrl && wikimediaUrl !== "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Use ↑ UPLOAD or WEB</div>}
                   </div>
                 </div>
               );
@@ -3824,17 +3824,17 @@ function App() {
                     {telemParsing ? "..." : (telemetry ? "↑ REPLACE" : "↑ IMPORT")}
                     <input type="file" accept=".csv,.txt,.log" style={{ display: "none" }} onChange={function(e) { if (e.target.files[0]) parseTelemetryFile(e.target.files[0]); e.target.value = ""; }} />
                   </label>
-                  {telemetry && <button onClick={function() { setTelemetry(null); }} title="Remover telemetria" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: "2px 4px" }}>✕</button>}
+                  {telemetry && <button onClick={function() { setTelemetry(null); }} title="Remove telemetry" style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer", padding: "2px 4px" }}>✕</button>}
                 </div>
               </div>
-              {telemParsing && <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, color: C.td, fontSize: 11 }}><Loader /><span>PROCESSANDO...</span></div>}
+              {telemParsing && <div style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, color: C.td, fontSize: 11 }}><Loader /><span>PROCESSING...</span></div>}
               {telemetry && !telemParsing && (
                 <div style={{ padding: "0 10px 10px" }}>
                   <div style={{ background: C.sfh, borderRadius: 3, padding: "8px 10px" }}>
                     <div style={{ fontSize: 10, color: C.ts, marginBottom: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{telemetry.fileName}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 8px" }}>
                       {[
-                        ["Voltas", telemetry.laps && telemetry.laps.length],
+                        ["Laps", telemetry.laps && telemetry.laps.length],
                         ["Points", telemetry.rows],
                         ["Best lap", telemetry.overall && telemetry.overall.bestLapTime ? telemetry.overall.bestLapTime + "s" : null],
                         ["Max speed", telemetry.overall && telemetry.overall.maxSpeed ? telemetry.overall.maxSpeed : null],
@@ -3851,11 +3851,11 @@ function App() {
                     </div>
                     {telemetry.channelsFound && telemetry.channelsFound.length > 0 && (
                       <div style={{ marginTop: 6, fontSize: 8, color: C.td, lineHeight: 1.6 }}>
-                        Canais: <span style={{ color: C.tm }}>{telemetry.channelsFound.join(" · ")}</span>
+                        Channels: <span style={{ color: C.tm }}>{telemetry.channelsFound.join(" · ")}</span>
                       </div>
                     )}
                     <button onClick={function() { sendMsg("Analyze my telemetry data and identify the top 3 setup changes that would improve my lap time. Reference specific channels and lap numbers."); }} disabled={messages.length < 1 || loading} style={{ marginTop: 8, width: "100%", padding: "5px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>
-                      ANALISAR COM ENGENHEIRO
+                      ANALYZE WITH ENGINEER
                     </button>
                   </div>
                 </div>
@@ -3909,13 +3909,13 @@ function App() {
             {messages.length >= 2 && (
               <button onClick={function() { setEditMode(function(p) { var next = !p; if (!next) setActiveCell(null); return next; }); }}
                 style={{ padding: "4px 12px", background: editMode ? "rgba(74,222,128,0.12)" : "transparent", border: "1px solid " + (editMode ? "#4ade80" : C.bd), borderRadius: 3, color: editMode ? "#4ade80" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, cursor: "pointer", flexShrink: 0, fontWeight: editMode ? 700 : 400 }}>
-                {editMode ? "✓ EDITANDO" : "EDITAR"}
+                {editMode ? "✓ EDITING" : "EDIT"}
               </button>
             )}
             {editMode && Object.keys(manualEdits).length > 0 && (
-              <button onClick={function() { setManualEdits({}); setActiveCell(null); setToast("Edições removidas"); }}
+              <button onClick={function() { setManualEdits({}); setActiveCell(null); setToast("Edits cleared"); }}
                 style={{ padding: "4px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>
-                LIMPAR
+                CLEAR
               </button>
             )}
           </div>
