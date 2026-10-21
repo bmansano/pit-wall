@@ -21,6 +21,8 @@
   input, textarea { font-family: inherit; }
   button:disabled { cursor: not-allowed; }
   input:focus, textarea:focus { outline: none !important; border-color: #f97316 !important; }
+  select { font-family: inherit; }
+  select:focus { outline: none !important; border-color: #f97316 !important; }
   input::placeholder, textarea::placeholder { color: #3a3a44; }
   .toast-enter { animation: toastIn 0.2s ease; }
   @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -31,9 +33,8 @@
     body { overflow-y: auto !important; overflow-x: hidden; }
     .pw-desktop-only { display: none !important; }
     .pw-mobile-only { display: flex !important; }
-    .pw-sim-bar { flex-wrap: wrap; height: auto !important; padding: 8px 12px !important; gap: 6px !important; }
-    .pw-config-panels { flex-direction: column !important; overflow: visible !important; padding-bottom: 140px; }
-    .pw-footer-bar { flex-wrap: wrap; height: auto !important; padding: 12px !important; gap: 8px !important; position: fixed !important; bottom: 0; left: 0; right: 0; z-index: 10; }
+    .pw-wiz-nav { position: fixed !important; bottom: 0; left: 0; right: 0; z-index: 30; }
+    .pw-wiz-stepper { position: sticky; top: 0; z-index: 25; }
     .pw-chat-sidebar-overlay { position: fixed !important; top: 0; left: 0; bottom: 0; width: 85vw !important; z-index: 50; box-shadow: 4px 0 24px rgba(0,0,0,0.8); }
     .pw-chat-main { min-width: 0 !important; }
     .pw-history-sidebar { width: 100% !important; flex-direction: row !important; overflow-x: auto; flex-shrink: 0; border-right: none !important; border-bottom: 1px solid #1e1e26; max-height: 52px; }
@@ -47,7 +48,6 @@
   }
   @media (min-width: 900px) {
     .pw-mobile-only { display: none !important; }
-    .pw-config-panel-tabs { display: none !important; }
   }
   @media (max-width: 1099px) {
     .pw-created-by-label { display: none !important; }
@@ -819,6 +819,25 @@ window.storage = storage;
 
 // Models used by the app — one place to change them.
 var PW_MODELS = { build: "claude-sonnet-5", adjust: "claude-haiku-4-5", extract: "claude-haiku-4-5", vision: "claude-sonnet-5", research: "claude-sonnet-5" };
+
+// Read a screenshot, downscale it (max 1600 px) and return base64 JPEG + a preview URL.
+function fileToJpeg(file) {
+  return new Promise(function(resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function() {
+      var k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      var c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      var dataUrl = c.toDataURL("image/jpeg", 0.82);
+      URL.revokeObjectURL(url);
+      resolve({ name: file.name, type: "image/jpeg", data: dataUrl.split(",")[1], preview: dataUrl });
+    };
+    img.onerror = function() { URL.revokeObjectURL(url); reject(new Error("Could not read " + file.name)); };
+    img.src = url;
+  });
+}
 
 // Every Claude call goes through the Supabase Edge Function. The signed-in user's access token is sent
 // so the function can verify who is calling (the anon key alone is public).
@@ -2249,6 +2268,9 @@ function App() {
   }, []);
 
   var _step = useState("config"); var step = _step[0]; var setStep = _step[1];
+  // Last-used configuration (restored so returning drivers only change what differs)
+  var restoredCfg = useRef(null);
+  if (restoredCfg.current === null) restoredCfg.current = PW.lastConfig.load() || {};
 
   // ── RESPONSIVE ─────────────────────────────────────────────────────────────
   var _mob = useState(function() { return window.innerWidth < 900; });
@@ -2260,17 +2282,31 @@ function App() {
     document.body.style.overflow = isMobile ? "auto" : "hidden";
     return function() { window.removeEventListener("resize", onResize); };
   }, [isMobile]);
-  // Mobile config: which panel is active (0=category, 1=cars, 2=track)
-  var _mcp = useState(0); var mobileConfigPanel = _mcp[0]; var setMobileConfigPanel = _mcp[1];
+  // Setup builder: which step is open (0 simulator, 1 car, 2 track, 3 session)
+  var _cs = useState(function() {
+    var r = restoredCfg.current;
+    if (!r.game || !GAMES[r.game]) return 0;
+    if (!r.category || !(r.cars && r.cars.length)) return 1;
+    if (!r.track) return 2;
+    return 3;
+  });
+  var cfgStep = _cs[0]; var setCfgStep = _cs[1];
+  var _co = useState(false); var catOpen = _co[0]; var setCatOpen = _co[1];
+  var _ml = useState(false); var modsLoaded = _ml[0]; var setModsLoaded = _ml[1];
+  // Memory page
+  var _mtab = useState("lessons"); var memTab = _mtab[0]; var setMemTab = _mtab[1];
+  var _mfil = useState({ game: "", kind: "", q: "" }); var memFilter = _mfil[0]; var setMemFilter = _mfil[1];
+  var _rule = useState({ kind: "preference", scope: "driver", text: "" }); var ruleDraft = _rule[0]; var setRuleDraft = _rule[1];
+  var _ob = useState(""); var openBaseline = _ob[0]; var setOpenBaseline = _ob[1];
 
   // Session config
-  var _game = useState(""); var game = _game[0]; var setGame = _game[1];
-  var _cat = useState(""); var category = _cat[0]; var setCategory = _cat[1];
-  var _cars = useState([]); var selectedCars = _cars[0]; var setSelectedCars = _cars[1];
-  var _track = useState(""); var track = _track[0]; var setTrack = _track[1];
-  var _cond = useState("Dry"); var condition = _cond[0]; var setCondition = _cond[1];
-  var _stype = useState("race"); var sessionType = _stype[0]; var setSessionType = _stype[1];
-  var _laps = useState(""); var raceLaps = _laps[0]; var setRaceLaps = _laps[1];
+  var _game = useState(function() { var r = restoredCfg.current; return r.game && GAMES[r.game] ? r.game : ""; }); var game = _game[0]; var setGame = _game[1];
+  var _cat = useState(function() { var r = restoredCfg.current; return r.game && GAMES[r.game] ? (r.category || "") : ""; }); var category = _cat[0]; var setCategory = _cat[1];
+  var _cars = useState(function() { var r = restoredCfg.current; return r.game && GAMES[r.game] && Array.isArray(r.cars) ? r.cars.slice(0, 8) : []; }); var selectedCars = _cars[0]; var setSelectedCars = _cars[1];
+  var _track = useState(function() { var r = restoredCfg.current; return r.game && GAMES[r.game] ? (r.track || "") : ""; }); var track = _track[0]; var setTrack = _track[1];
+  var _cond = useState(function() { var r = restoredCfg.current; return CONDITIONS.indexOf(r.condition) >= 0 ? r.condition : "Dry"; }); var condition = _cond[0]; var setCondition = _cond[1];
+  var _stype = useState(function() { return restoredCfg.current.sessionType === "qualifying" ? "qualifying" : "race"; }); var sessionType = _stype[0]; var setSessionType = _stype[1];
+  var _laps = useState(function() { var l = restoredCfg.current.raceLaps; return l ? String(l) : ""; }); var raceLaps = _laps[0]; var setRaceLaps = _laps[1];
   // Chat state (persists across tab navigation)
   var _msgs = useState([]); var messages = _msgs[0]; var setMessages = _msgs[1];
   var _loading = useState(false); var loading = _loading[0]; var setLoading = _loading[1];
@@ -2330,7 +2366,7 @@ function App() {
   });
   var ragArm = _ragArm[0];
   // Pre-session notes from the driver ("what do you want fixed?")
-  var _dn = useState(""); var driverNotes = _dn[0]; var setDriverNotes = _dn[1];
+  var _dn = useState(function() { return String(restoredCfg.current.notes || "").slice(0, 600); }); var driverNotes = _dn[0]; var setDriverNotes = _dn[1];
   // ── Engineer memory + verified car profiles ───────────────────────────────
   var _mem = useState(function() { return PW.memory.empty(); }); var memory = _mem[0]; var setMemory = _mem[1];
   var memoryRef = useRef(memory);
@@ -2371,6 +2407,26 @@ function App() {
   var _chatView = useState("live"); var chatView = _chatView[0]; var setChatView = _chatView[1];
 
   useEffect(function() { if (user) { loadSetups(); loadMods(); loadApprovalStatus(); } }, [user]);
+  // Remember the last configuration
+  useEffect(function() {
+    PW.lastConfig.save({ game: game, category: category, cars: selectedCars, track: track, condition: condition, sessionType: sessionType, raceLaps: raceLaps, notes: driverNotes });
+  }, [game, category, selectedCars, track, condition, sessionType, raceLaps, driverNotes]);
+  // After the shared MOD data has loaded, drop restored selections that no longer exist
+  useEffect(function() {
+    if (!modsLoaded) return;
+    var g = getEffectiveGame(game);
+    if (!g) { if (game) { setGame(""); setCategory(""); setSelectedCars([]); setTrack(""); } setCfgStep(0); return; }
+    var customCats = (customMods[game] && customMods[game].customCategories) || {};
+    if (category && !g.categories[category] && !customCats[category]) { setCategory(""); setSelectedCars([]); setCfgStep(function(x) { return Math.min(x, 1); }); return; }
+    var modCars = (customMods[game] && customMods[game].categories && customMods[game].categories[category]) || [];
+    var known = ((g.categories[category] && g.categories[category].cars) || []).concat(modCars);
+    if (category && selectedCars.some(function(c) { return known.indexOf(c) < 0; })) {
+      var kept = selectedCars.filter(function(c) { return known.indexOf(c) >= 0; });
+      setSelectedCars(kept); if (!kept.length) setCfgStep(function(x) { return Math.min(x, 1); });
+    }
+    var allTracks = g.tracks.concat((customMods[game] && customMods[game].tracks) || []);
+    if (track && allTracks.indexOf(track) < 0) { setTrack(""); setCfgStep(function(x) { return Math.min(x, 2); }); }
+  }, [modsLoaded, customMods, game, category]);
   // Load the engineer's memory and the shared car profiles (cloud table if it exists, otherwise this device)
   useEffect(function() {
     if (!user) return;
@@ -2434,6 +2490,7 @@ function App() {
     if (!window.sb) return;
     window.sb.from("setups").select("data").eq("id", "__mods__")
       .then(function(res) {
+        setModsLoaded(true);
         if (res.error) { console.error("loadMods:", res.error.message); return; }
         if (res.data && res.data.length > 0 && res.data[0].data) {
           setCustomMods(res.data[0].data);
@@ -2985,26 +3042,33 @@ function App() {
 
   function discardSession() {
     setMessages([]); setGame(""); setCategory(""); setSelectedCars([]); setTrack(""); setCondition("Dry");
-    setSessionType("race"); setRaceLaps(""); setStep("config"); setConfirmDiscard(false); setActiveSetupSrc(null);
+    setSessionType("race"); setRaceLaps(""); setDriverNotes(""); setCfgStep(0); setStep("config"); setConfirmDiscard(false); setActiveSetupSrc(null);
+  }
+
+  // A saved setup may lack gameKey / categoryKey (older saves): recover them from the names
+  function resolveSetupKeys(sv) {
+    var gKey = sv.gameKey;
+    if (!gKey && sv.game) { Object.keys(GAMES).forEach(function(k) { if (GAMES[k].name === sv.game) gKey = k; }); }
+    gKey = gKey || "";
+    var catKey = sv.categoryKey;
+    if (!catKey && sv.category && gKey && GAMES[gKey]) {
+      Object.keys(GAMES[gKey].categories || {}).forEach(function(k) { if (GAMES[gKey].categories[k].name === sv.category) catKey = k; });
+    }
+    return { gKey: gKey, catKey: catKey || "" };
+  }
+
+  // Start the setup builder from a previous combination (car, track, session) in one click
+  function loadCombo(sv) {
+    var k = resolveSetupKeys(sv);
+    setGame(k.gKey); setCategory(k.catKey); setSelectedCars((sv.cars || []).slice()); setTrack(sv.track || "");
+    setCondition(CONDITIONS.indexOf(sv.condition) >= 0 ? sv.condition : "Dry"); setSessionType(sv.sessionType === "qualifying" ? "qualifying" : "race"); setRaceLaps(sv.raceLaps || ""); setDriverNotes("");
+    setCfgStep(3);
   }
 
   // Restore a saved setup as active session so user can continue chatting
   function continueFromSetup(s) {
-    // Recover gameKey from game name if missing
-    var gKey = s.gameKey;
-    if (!gKey && s.game) {
-      Object.keys(GAMES).forEach(function(k) { if (GAMES[k].name === s.game) gKey = k; });
-    }
-    gKey = gKey || "";
-
-    // Recover categoryKey from category name if missing
-    var catKey = s.categoryKey;
-    if (!catKey && s.category && gKey && GAMES[gKey]) {
-      Object.keys(GAMES[gKey].categories || {}).forEach(function(k) {
-        if (GAMES[gKey].categories[k].name === s.category) catKey = k;
-      });
-    }
-    catKey = catKey || "";
+    var rk = resolveSetupKeys(s);
+    var gKey = rk.gKey, catKey = rk.catKey;
 
     setGame(gKey);
     setCategory(catKey);
@@ -3423,6 +3487,136 @@ function App() {
     return PW.store.deleteProfile(window.sb, key, cloudOkRef.current.profiles).then(function(r) { setProfiles(r.profiles); return r; });
   }
 
+  // ── TEACH THE ENGINEER: build a verified parameter profile from setup-screen screenshots ──
+  function openTeach(car) {
+    var gk = game || (activeSetupSrc && activeSetupSrc.gameKey) || "";
+    setTeach({ game: gk, car: car, files: [], busy: false, error: "", result: null, replace: false, existing: profiles[PW.profile.key(gk, car)] || null });
+  }
+  function openTeach2(p) {
+    setTeach({ game: p.game, car: p.car, files: [], busy: false, error: "", result: null, replace: false, existing: p });
+  }
+  function teachAddFiles(list) {
+    if (!teach) return;
+    var arr = Array.prototype.slice.call(list || []).filter(function(f) { return /^image\//.test(f.type); });
+    arr = arr.slice(0, Math.max(0, 8 - teach.files.length));
+    if (!arr.length) return;
+    setTeach(function(cur) { return cur ? Object.assign({}, cur, { busy: true, error: "" }) : cur; });
+    Promise.all(arr.map(fileToJpeg)).then(function(items) {
+      setTeach(function(cur) {
+        if (!cur) return cur;
+        var files = cur.files.concat(items);
+        var total = files.reduce(function(n, f) { return n + f.data.length; }, 0);
+        if (total > 4200000) return Object.assign({}, cur, { busy: false, error: "These screenshots are too large together. Remove some or use smaller captures." });
+        return Object.assign({}, cur, { files: files, busy: false, result: null });
+      });
+    }).catch(function(e) { setTeach(function(cur) { return cur ? Object.assign({}, cur, { busy: false, error: e.message }) : cur; }); });
+  }
+  function teachAnalyze() {
+    var t = teach; if (!t || !t.files.length || t.busy) return;
+    setTeach(Object.assign({}, t, { busy: true, error: "", result: null }));
+    var gName = (GAMES[t.game] && GAMES[t.game].name) || t.game;
+    var req = PW.profile.buildRequest(t.files.map(function(f) { return { type: f.type, data: f.data }; }), { game: t.game, gameName: gName, car: t.car, model: PW_MODELS.vision });
+    req._user_id = user ? user.id : null;
+    callClaude(req).then(function(d) {
+      var raw = PW.parseJsonLoose(PW.sync.textOf(d.content));
+      var prof = PW.profile.normalize(raw, { game: t.game, car: t.car, by: user ? user.id : "" });
+      if (!prof) throw new Error(d.stop_reason === "max_tokens" ? "There are more parameters than could be read in one go. Analyse 3–4 screenshots at a time — each batch is merged into the profile." : "Could not read any setup parameters from these screenshots. Use clear, full-screen captures of the setup pages.");
+      var merged = (t.existing && !t.replace) ? PW.profile.merge(t.existing, prof) : prof;
+      setTeach(function(cur) { return cur ? Object.assign({}, cur, { busy: false, result: merged }) : cur; });
+    }).catch(function(e) { setTeach(function(cur) { return cur ? Object.assign({}, cur, { busy: false, error: e.message }) : cur; }); });
+  }
+  function teachSave() {
+    var t = teach; if (!t || !t.result) return;
+    saveProfileFor(t.result).then(function(r) {
+      setTeach(null);
+      setToast("Saved — the engineer now knows " + t.car + "'s parameters" + (r.source === "local" ? " (on this device)" : ""));
+    });
+  }
+  function renderTeachModal() {
+    if (!teach) return null;
+    var cnt = teach.result ? PW.profile.count(teach.result) : null;
+    var ex = teach.existing ? PW.profile.count(teach.existing) : null;
+    var gName = (GAMES[teach.game] && GAMES[teach.game].name) || teach.game;
+    var btn = function(primary, disabled) { return { padding: "11px 22px", background: primary && !disabled ? C.ac : "transparent", border: "1px solid " + (primary && !disabled ? C.ac : C.bd), borderRadius: 4, color: primary && !disabled ? "#000" : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 11.5, letterSpacing: 1.5, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1 }; };
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 150, padding: isMobile ? 10 : 24 }}>
+        <div style={{ width: "100%", maxWidth: 740, maxHeight: "92vh", overflowY: "auto", background: C.sf, border: "1px solid " + C.bd, borderRadius: 8, padding: isMobile ? "18px 16px" : "26px 30px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 6 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.ac, marginBottom: 5 }}>TEACH THE ENGINEER</div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: C.tx }}>{teach.car}</div>
+              <div style={{ fontSize: 12.5, color: C.tm, marginTop: 2 }}>{gName}</div>
+            </div>
+            <button onClick={function() { setTeach(null); }} style={{ background: "none", border: "none", color: C.td, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+          </div>
+          <p style={{ fontSize: 13.5, color: C.ts, lineHeight: 1.65, margin: "14px 0 16px" }}>
+            Open this car's setup screens in the game — <b style={{ color: C.tx }}>every tab, including the Advanced pages</b> — and take one screenshot of each. The engineer reads them once, then only suggests parameters that exist and can be edited on this car, using the game's own names.
+          </p>
+          {ex && (
+            <div style={{ padding: "10px 12px", background: C.acs, border: "1px solid " + C.bd, borderLeft: "2px solid " + C.ok, borderRadius: 3, fontSize: 12.5, color: C.ts, marginBottom: 14 }}>
+              Current profile: <b style={{ color: C.tx }}>{ex.editable} editable</b> · {ex.fixed} fixed · updated {new Date(teach.existing.updated).toLocaleDateString("en-GB")}.
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={teach.replace} onChange={function(e) { var v = e.target.checked; setTeach(function(cur) { return Object.assign({}, cur, { replace: v, result: null }); }); }} style={{ accentColor: C.ac }} />
+                Replace it instead of adding to it
+              </label>
+            </div>
+          )}
+          <label style={{ display: "inline-block", padding: "10px 18px", background: C.acg, border: "1px dashed " + C.ac, borderRadius: 4, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11.5, letterSpacing: 1.5, fontWeight: 700, cursor: teach.files.length >= 8 ? "not-allowed" : "pointer", opacity: teach.files.length >= 8 ? 0.5 : 1 }}>
+            + ADD SCREENSHOTS ({teach.files.length}/8)
+            <input type="file" accept="image/*" multiple disabled={teach.files.length >= 8} style={{ display: "none" }} onChange={function(e) { teachAddFiles(e.target.files); e.target.value = ""; }} />
+          </label>
+          {teach.files.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+              {teach.files.map(function(f, i) {
+                return (
+                  <div key={i} style={{ position: "relative", width: 112, height: 70, border: "1px solid " + C.bd, borderRadius: 3, overflow: "hidden", background: "#000" }}>
+                    <img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <button onClick={function() { setTeach(function(cur) { return Object.assign({}, cur, { files: cur.files.filter(function(x, j) { return j !== i; }), result: null }); }); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 12, lineHeight: 1, cursor: "pointer" }}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {teach.error && <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, color: "#f87171", fontSize: 12.5, lineHeight: 1.5 }}>{teach.error}</div>}
+          {teach.busy && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, color: C.tm, fontSize: 12.5 }}><Loader /><span>Reading the screenshots… this can take up to a minute.</span></div>}
+          {teach.result && !teach.busy && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.ok, marginBottom: 8 }}>REVIEW — {cnt.editable} EDITABLE · {cnt.fixed} FIXED · {teach.result.tabs.length} TAB{teach.result.tabs.length > 1 ? "S" : ""}</div>
+              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid " + C.bd, borderRadius: 4, padding: "8px 12px", background: C.bg }}>
+                {teach.result.tabs.map(function(t, ti) {
+                  return (
+                    <div key={ti} style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.tx, marginBottom: 4 }}>{t.name}</div>
+                      {t.groups.map(function(g, gi) {
+                        return (
+                          <div key={gi} style={{ marginBottom: 6, paddingLeft: 10 }}>
+                            <div style={{ fontSize: 11, color: C.td, letterSpacing: 0.5 }}>{g.name}</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3 }}>
+                              {g.params.map(function(p, pi) {
+                                return <span key={pi} style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, border: "1px solid " + (p.editable ? C.bd : "rgba(245,158,11,0.4)"), color: p.editable ? C.ts : C.warn }}>{p.name}{p.editable ? "" : " · fixed"}</span>;
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+              {teach.result.notes && <div style={{ fontSize: 12, color: C.td, marginTop: 8 }}>Notes: {teach.result.notes}</div>}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+            {!teach.result && <button onClick={teachAnalyze} disabled={!teach.files.length || teach.busy} style={btn(true, !teach.files.length || teach.busy)}>ANALYZE SCREENSHOTS</button>}
+            {teach.result && <button onClick={teachSave} style={btn(true, false)}>SAVE PROFILE</button>}
+            {teach.result && <button onClick={function() { setTeach(function(cur) { return Object.assign({}, cur, { result: null }); }); }} style={btn(false, false)}>ADD MORE / REDO</button>}
+            <button onClick={function() { setTeach(null); }} style={btn(false, false)}>CANCEL</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // baseMessages: defaults to the current conversation; startSession passes [] because React state is not updated yet.
   async function sendMsg(msg, baseMessages) {
     if (!msg.trim()) return;
@@ -3821,6 +4015,7 @@ function App() {
       { key: "config", label: "CONFIG", icon: "🎛", desc: "Configure" },
       { key: "chat", label: "ENGINEER", icon: "💬", desc: "AI" },
       { key: "history", label: "SETUPS", icon: "📋", desc: "Saved" },
+      { key: "memory", label: "MEMORY", icon: "🧠", desc: "Lessons" },
     ];
     if (isAdmin) tabs.push({ key: "admin", label: "ADMIN", icon: "🔧", desc: "Admin" });
 
@@ -3828,6 +4023,7 @@ function App() {
       if (key === "config") { setStep("config"); }
       else if (key === "chat") { setStep("chat"); }
       else if (key === "admin") { setStep("admin"); if (!adminGame && Object.keys(GAMES)[0]) setAdminGame(Object.keys(GAMES)[0]); }
+      else if (key === "memory") { setStep("memory"); }
       else { setStep("history"); setSelectedSetup(null); if (savedSetups.length > 0) setHistoryGame(savedSetups[0].game); }
     }
 
@@ -3990,7 +4186,7 @@ function App() {
   function Toast() {
     if (!toast) return null;
     return (
-      <div className="toast-enter" style={{ position: "fixed", bottom: 24, right: 24, background: C.sfh, border: "1px solid " + C.ok, borderRadius: 5, padding: "10px 18px", color: C.ok, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
+      <div className="toast-enter" style={{ position: "fixed", bottom: isMobile ? 76 : 24, right: isMobile ? 12 : 24, background: C.sfh, border: "1px solid " + C.ok, borderRadius: 5, padding: "10px 18px", color: C.ok, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
         {toast}
       </div>
     );
@@ -4019,219 +4215,540 @@ function App() {
     );
   }
 
-  // ── CONFIG ──────────────────────────────────────────────────────────────────
+  // ── CONFIG: guided setup builder ──────────────────────────────────────────────
+  // Simulator → Car → Track → Session. Every field lives inside its step; the bottom bar only navigates.
   if (step === "config") {
-    return (
-      <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
-        <Header />
+    var wizLabels = ["SIMULATOR", "CAR", "TRACK", "SESSION"];
+    var cfgClassName = cc ? cc.name : (customCategoriesForGame[category] || "");
+    var wizDone = [!!game, !!(category && selectedCars.length > 0), !!track, !!canGo];
+    var wizMissing = [];
+    if (!game) wizMissing.push("simulator");
+    else {
+      if (!category) wizMissing.push("class"); else if (!selectedCars.length) wizMissing.push("car");
+      if (!track) wizMissing.push("track");
+    }
+    var sessText = (sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : "")) + " · " + condition;
+    var wizSummary = [
+      game ? (cg ? (cg.short || cg.name) : game) : "Choose a simulator",
+      category ? (cfgClassName + (selectedCars.length ? " · " + (selectedCars.length === 1 ? selectedCars[0] : selectedCars.length + " cars") : " · pick a car")) : "Choose a class and car",
+      track || "Choose a track",
+      sessText,
+    ];
+    var lblS = { fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td };
+    var chipS = function(sel) { return { padding: "9px 16px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 12.5, fontWeight: sel ? 700 : 400, letterSpacing: 0.5, cursor: "pointer", flexShrink: 0 }; };
+    var wizCtx = { game: game, cat: category, cars: selectedCars, track: track, cond: condition, sess: sessionType };
+    var wizLessons = (game && selectedCars.length) ? PW.memory.recall(memory, wizCtx) : [];
+    var wizRef = (game && selectedCars.length) ? PW.memory.bestBaseline(memory, wizCtx) : null;
+    var canNext = [!!game, !!(category && selectedCars.length > 0), !!track][cfgStep];
+    var nextLabel = ["CAR", "TRACK", "SESSION"][cfgStep];
+    function goStep(i) { if (i > 0 && !game) return; setCfgStep(i); }
+    function nextStep() { if (cfgStep < 3 && canNext) setCfgStep(cfgStep + 1); }
+    var navHint = cfgStep === 0 ? (game ? "Selected: " + (cg ? cg.name : game) : "Select a simulator to continue")
+      : cfgStep === 1 ? (!category ? "Select a class" : !selectedCars.length ? "Select at least one car" : selectedCars.length + " car" + (selectedCars.length > 1 ? "s" : "") + " selected")
+      : cfgStep === 2 ? (track ? track : "Select a track")
+      : (canGo ? "Everything is set" : "Missing: " + wizMissing.join(", "));
 
-        {/* Simulator bar */}
-        <div className="pw-sim-bar" style={{ height: 48, flexShrink: 0, background: C.sf, borderBottom: "1px solid " + C.bd, display: "flex", alignItems: "center", padding: "0 20px", gap: 6 }}>
-          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, marginRight: 4, flexShrink: 0 }}>SIMULATOR</span>
-          {Object.entries(GAMES).map(function(e2) {
-            var k = e2[0]; var g = e2[1]; var sel = game === k;
-            return (
-              <button key={k} onClick={function() { selectGame(k); setMobileConfigPanel(0); }} style={{ padding: "5px 14px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 12 : 11, fontWeight: sel ? 700 : 400, letterSpacing: 0.5 }}>
-                {isMobile ? (g.short || g.name) : g.name}
-              </button>
-            );
-          })}
-        </div>
+    // recent combinations from saved setups
+    var recentCombos = []; var seenCombo = {};
+    savedSetups.forEach(function(sv) {
+      if (recentCombos.length >= 4 || !sv || !sv.cars || !sv.track) return;
+      var rk = resolveSetupKeys(sv); if (!GAMES[rk.gKey]) return;
+      var key = rk.gKey + "|" + sv.cars.join("+") + "|" + sv.track;
+      if (seenCombo[key]) return; seenCombo[key] = 1; recentCombos.push(sv);
+    });
 
-        {/* Mobile panel tab selector */}
-        {isMobile && (
-          <div style={{ display: "flex", borderBottom: "1px solid " + C.bd, background: C.sfc, flexShrink: 0 }}>
-            {[["CATEGORY","0"],["CARS","1"],["TRACK","2"]].map(function(t, ti) {
-              var act = mobileConfigPanel === ti;
-              var done = (ti === 0 && category) || (ti === 1 && selectedCars.length > 0) || (ti === 2 && track);
-              return (
-                <button key={ti} onClick={function() { setMobileConfigPanel(ti); }} style={{ flex: 1, padding: "12px 8px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : (done ? C.ts : C.td), fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                  {t[0]}
-                  {done && !act && <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.ok, flexShrink: 0 }} />}
-                </button>
-              );
-            })}
-          </div>
-        )}
+    var wizBody = null;
 
-        {/* 3-panel area — fills remaining height */}
-        <div className="pw-config-panels" style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
-
-          {/* Panel 1: Category */}
-          <div style={{ width: isMobile ? "100%" : 244, display: (!isMobile || mobileConfigPanel === 0) ? "flex" : "none", flexShrink: 0, flexDirection: "column", background: C.sf, borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none" }}>
-            <div style={{ height: 44, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td }}>CATEGORY</span>
-              {game && <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: C.td }}>{Object.keys(cg.categories).length}</span>}
+    // ── Step 1: simulator ──
+    if (cfgStep === 0) {
+      wizBody = (
+        <div style={{ padding: isMobile ? "20px 14px 96px" : "30px 36px", overflowY: isMobile ? "visible" : "auto", height: isMobile ? "auto" : "100%" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+            <div style={{ fontSize: isMobile ? 19 : 23, fontWeight: 600, color: C.tx, marginBottom: 6 }}>Which simulator are you driving?</div>
+            <div style={{ fontSize: 13, color: C.tm, marginBottom: 22 }}>Pick one — the next steps only show the cars and tracks of that game.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(" + (isMobile ? 150 : 220) + "px, 1fr))", gap: 12 }}>
+              {Object.keys(GAMES).map(function(k) {
+                var eg = getEffectiveGame(k); var sel = game === k;
+                var nCars = Object.keys(eg.categories).reduce(function(n, c2) { return n + eg.categories[c2].cars.length; }, 0);
+                return (
+                  <button key={k} onClick={function() { selectGame(k); setCfgStep(1); }} style={{ textAlign: "left", padding: "16px 16px 14px", background: sel ? C.acg : C.sf, border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 6, cursor: "pointer", color: C.tx }}>
+                    <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: sel ? C.ac : C.td, marginBottom: 6 }}>{eg.short || ""}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: sel ? C.ac : C.tx, marginBottom: 8, lineHeight: 1.3 }}>{eg.name}</div>
+                    <div style={{ fontSize: 11.5, color: C.tm }}>{Object.keys(eg.categories).length} classes · {nCars} cars · {eg.tracks.length} tracks</div>
+                  </button>
+                );
+              })}
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
-              {!game
-                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>Select a simulator<br/>above</div>
-                : (function() {
-                    var builtIn = Object.entries(cg.categories).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
-                      var k = e2[0]; var cat = e2[1]; var sel = category === k;
-                      return (
-                        <button key={k} onClick={function() { selectCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
-                          <span>{cat.name}</span>
-                          <span style={{ fontSize: 12, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length + ((customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k].length : 0)}</span>
-                        </button>
-                      );
-                    });
-                    var custom = Object.entries(customCategoriesForGame).map(function(e2) {
-                      var k = e2[0]; var name = e2[1]; var sel = category === k;
-                      var cars = (customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k] : [];
-                      return (
-                        <button key={k} onClick={function() { selectCategory(k); if (isMobile) setMobileConfigPanel(1); }} style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? "rgba(168,85,247,0.12)" : "transparent", border: "none", borderLeft: "2px solid " + (sel ? "#c084fc" : "transparent"), color: sel ? "#c084fc" : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }}>
-                          <span>{name}</span>
-                          <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", marginLeft: 6 }}>MOD {cars.length}</span>
-                        </button>
-                      );
-                    });
-                    return builtIn.concat(custom);
-                  })()
-              }
-            </div>
-          </div>
-
-          {/* Panel 2: Cars */}
-          <div style={{ flex: isMobile ? "none" : 1, width: isMobile ? "100%" : "auto", display: (!isMobile || mobileConfigPanel === 1) ? "flex" : "none", flexDirection: "column", borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none", minWidth: 0, background: C.bg }}>
-            <div style={{ height: 44, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CARS</span>
-              {category && <>
-                <input placeholder="Search..." value={carFilter} onChange={function(e) { setCarFilter(e.target.value); }} style={{ flex: 1, maxWidth: 240, padding: "5px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
-                <span style={{ fontSize: 11, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{selectedCars.length}/{allCars.length}</span>
-                <button onClick={selAll} style={{ padding: "4px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.tm, fontSize: 11, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, flexShrink: 0 }}>{selectedCars.length === allCars.length ? "CLEAR" : "ALL"}</button>
-              </>}
-            </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
-              {!category
-                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>Select a category</div>
-                : fCars.map(function(car) {
-                    var sel = selectedCars.includes(car);
-                    var isMod = modCarsForCat.includes(car);
+            {recentCombos.length > 0 && (
+              <div style={{ marginTop: 36 }}>
+                <div style={lblS}>RECENT — START FROM A PREVIOUS COMBINATION</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(" + (isMobile ? 240 : 290) + "px, 1fr))", gap: 10, marginTop: 12 }}>
+                  {recentCombos.map(function(sv, i) {
+                    var rk = resolveSetupKeys(sv);
                     return (
-                      <div key={car} style={{ display: "flex", alignItems: "center", marginBottom: 1 }}>
-                        <button onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, textAlign: "left", padding: "10px 10px 10px 14px", background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 14, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
-                          <span style={{ width: 16, height: 16, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
-                          {car}
-                          {isMod && <span style={{ marginLeft: "auto", fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif" }}>MOD</span>}
-                        </button>
-                        {isMod && <button onClick={function() { removeModCar(game, category, car); if (selectedCars.includes(car)) toggleCar(car); }} style={{ padding: "0 10px", background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 16, lineHeight: 1, height: "100%", flexShrink: 0 }} title="Remove MOD car">×</button>}
-                      </div>
+                      <button key={i} onClick={function() { loadCombo(sv); }} style={{ textAlign: "left", padding: "12px 14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 5, cursor: "pointer" }}>
+                        <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.ac, marginBottom: 4 }}>{GAMES[rk.gKey].short || GAMES[rk.gKey].name}</div>
+                        <div style={{ fontSize: 13.5, color: C.tx, marginBottom: 3 }}>{sv.cars.slice(0, 2).join(", ")}{sv.cars.length > 2 ? " +" + (sv.cars.length - 2) : ""}</div>
+                        <div style={{ fontSize: 12, color: C.tm }}>{sv.track} · {sv.sessionType === "qualifying" ? "Qualifying" : "Race" + (sv.raceLaps ? " " + sv.raceLaps + "L" : "")} · {sv.condition}</div>
+                      </button>
                     );
-                  })
-              }
-              {isAdmin && category && (
-                <div style={{ padding: "8px 8px 4px", borderTop: "1px solid " + C.bd, marginTop: 4, display: "flex", justifyContent: "center" }}>
-                  <button onClick={function() { setStep("admin"); setAdminGame(game); setAdminSection("cars"); setAdminCat(category); if (!adminGame) setAdminGame(game); }} style={{ fontSize: 10, letterSpacing: 1, padding: "5px 12px", background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.35)", borderRadius: 3, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", cursor: "pointer" }}>⚑ MANAGE MODS</button>
+                  })}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
+        </div>
+      );
+    }
 
-          {/* Panel 3: Tracks */}
-          <div style={{ width: isMobile ? "100%" : 296, display: (!isMobile || mobileConfigPanel === 2) ? "flex" : "none", flexShrink: 0, flexDirection: "column", background: C.bg }}>
-            <div style={{ height: 44, flexShrink: 0, padding: "0 10px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>TRACK</span>
-              {game && <input placeholder="Search..." value={trackFilter} onChange={function(e) { setTrackFilter(e.target.value); }} style={{ flex: 1, padding: "5px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />}
-              {game && <span style={{ fontSize: 11, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{fTrks.length}</span>}
+    // ── Step 2: class + car ──
+    if (cfgStep === 1) {
+      var catRowS = function(sel, mod) { return { display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? (mod ? "rgba(168,85,247,0.12)" : C.acg) : "transparent", border: "none", borderLeft: "2px solid " + (sel ? (mod ? "#c084fc" : C.ac) : "transparent"), color: sel ? (mod ? "#c084fc" : C.ac) : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", textAlign: "left", borderRadius: "0 4px 4px 0" }; };
+      var pickCat = function(k) { selectCategory(k); setCatOpen(false); };
+      var showCats = !isMobile || catOpen || !category;
+      wizBody = (
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: isMobile ? "auto" : "100%", minHeight: 0, overflow: isMobile ? "visible" : "hidden", paddingBottom: isMobile ? 84 : 0 }}>
+          {showCats && (
+            <div style={{ width: isMobile ? "100%" : 300, flexShrink: 0, display: "flex", flexDirection: "column", background: C.sf, borderRight: isMobile ? "none" : "1px solid " + C.bd, borderBottom: isMobile ? "1px solid " + C.bd : "none", minHeight: 0 }}>
+              <div style={{ height: 46, flexShrink: 0, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+                <span style={lblS}>CLASS</span>
+                <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, color: C.td }}>{Object.keys(cg ? cg.categories : {}).length + Object.keys(customCategoriesForGame).length}</span>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", maxHeight: isMobile ? 380 : "none" }}>
+                {Object.entries(cg ? cg.categories : {}).sort(function(a, b) { return a[1].name.localeCompare(b[1].name); }).map(function(e2) {
+                  var k = e2[0]; var cat = e2[1]; var sel = category === k;
+                  return (
+                    <button key={k} onClick={function() { pickCat(k); }} style={catRowS(sel, false)}>
+                      <span>{cat.name}</span>
+                      <span style={{ fontSize: 12, color: sel ? C.acb : C.td, marginLeft: 6, flexShrink: 0 }}>{cat.cars.length + ((customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k].length : 0)}</span>
+                    </button>
+                  );
+                }).concat(Object.entries(customCategoriesForGame).map(function(e2) {
+                  var k = e2[0]; var name = e2[1]; var sel = category === k;
+                  var mc = (customMods[game] && customMods[game].categories && customMods[game].categories[k]) ? customMods[game].categories[k] : [];
+                  return (
+                    <button key={k} onClick={function() { pickCat(k); }} style={catRowS(sel, true)}>
+                      <span>{name}</span>
+                      <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", marginLeft: 6 }}>MOD {mc.length}</span>
+                    </button>
+                  );
+                }))}
+              </div>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 4px", minHeight: isMobile ? 200 : 0 }}>
-              {!game
-                ? <div style={{ padding: "32px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>Select a simulator above</div>
-                : (function() {
-                    var grouped = {};
-                    var groupOrder = [];
-                    fTrks.forEach(function(t) {
-                      var country = getTrackCountry(t);
-                      if (!grouped[country]) { grouped[country] = []; groupOrder.push(country); }
-                      grouped[country].push(t);
-                    });
-                    groupOrder.sort();
-                    return groupOrder.map(function(country) {
+          )}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: C.bg, minHeight: 0 }}>
+            {isMobile && category && !catOpen && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: C.sfc, borderBottom: "1px solid " + C.bd }}>
+                <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.td, fontFamily: "'Chakra Petch',sans-serif" }}>CLASS</span>
+                <span style={{ flex: 1, fontSize: 14, color: C.ac, fontWeight: 500, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cfgClassName}</span>
+                <button onClick={function() { setCatOpen(true); }} style={{ padding: "5px 12px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontSize: 11, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1 }}>CHANGE</button>
+              </div>
+            )}
+            {(!isMobile || (category && !catOpen)) && (
+              <div style={{ height: 46, flexShrink: 0, padding: "0 12px 0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid " + C.bd, background: C.sfc }}>
+                <span style={{ ...lblS, flexShrink: 0 }}>CARS</span>
+                {category && <>
+                  <input placeholder="Search cars..." value={carFilter} onChange={function(e) { setCarFilter(e.target.value); }} style={{ flex: 1, maxWidth: 260, minWidth: 0, padding: "6px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 }} />
+                  <span style={{ fontSize: 11, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{selectedCars.length}/{allCars.length}</span>
+                  <button onClick={selAll} style={{ padding: "5px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.tm, fontSize: 11, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5, flexShrink: 0 }}>{selectedCars.length === allCars.length ? "CLEAR" : "ALL"}</button>
+                </>}
+              </div>
+            )}
+            {(!isMobile || (category && !catOpen)) && (
+              <div style={{ flex: 1, overflowY: isMobile ? "visible" : "auto", padding: "6px 4px", minHeight: isMobile ? 120 : 0 }}>
+                {!category
+                  ? <div style={{ padding: "40px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>Pick a class first — its cars appear here</div>
+                  : fCars.map(function(car) {
+                      var sel = selectedCars.includes(car);
+                      var isMod = modCarsForCat.includes(car);
+                      var hasProf = !!profiles[PW.profile.key(game, car)];
                       return (
-                        <div key={country}>
-                          <div style={{ padding: "10px 14px 3px", fontSize: 11, letterSpacing: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", textTransform: "uppercase", opacity: 0.7, borderBottom: "1px solid " + C.bd, marginBottom: 2 }}>{country}</div>
-                          {grouped[country].map(function(t) {
-                            var sel = track === t;
-                            var isMod = modTracksForGame.includes(t);
-                            return (
-                              <div key={t} style={{ display: "flex", alignItems: "center" }}>
-                                <button onClick={function() { setTrack(t); }} style={{ flex: 1, textAlign: "left", padding: "10px 10px 10px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0", display: "flex", alignItems: "center", gap: 8 }}>
-                                  {t}
-                                  {isMod && <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif" }}>MOD</span>}
-                                </button>
-                                {isMod && <button onClick={function() { if (track === t) setTrack(""); removeModTrack(game, t); }} style={{ padding: "0 10px", background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 16, lineHeight: 1, flexShrink: 0 }} title="Remove MOD track">×</button>}
-                              </div>
-                            );
-                          })}
+                        <div key={car} style={{ display: "flex", alignItems: "center", marginBottom: 1 }}>
+                          <button onClick={function() { toggleCar(car); }} style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, textAlign: "left", padding: "10px 10px 10px 14px", background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.tx : C.ts, fontSize: 14, cursor: "pointer", borderRadius: "0 4px 4px 0" }}>
+                            <span style={{ width: 16, height: 16, flexShrink: 0, border: "1px solid " + (sel ? C.ac : C.td), background: sel ? C.ac : "transparent", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#000", fontWeight: 700 }}>{sel ? "✓" : ""}</span>
+                            {car}
+                            <span style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+                              {hasProf && <span title="The engineer has this car's verified parameter list" style={{ fontSize: 9, letterSpacing: 1, padding: "1px 6px", border: "1px solid rgba(34,197,94,0.4)", background: "rgba(34,197,94,0.10)", borderRadius: 2, color: C.ok, fontFamily: "'Chakra Petch',sans-serif" }}>VERIFIED</span>}
+                              {isMod && <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif" }}>MOD</span>}
+                            </span>
+                          </button>
+                          {isMod && <button onClick={function() { removeModCar(game, category, car); if (selectedCars.includes(car)) toggleCar(car); }} style={{ padding: "0 10px", background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 16, lineHeight: 1, height: "100%", flexShrink: 0 }} title="Remove MOD car">×</button>}
                         </div>
                       );
-                    });
-                  })()
-              }
-              {isAdmin && game && (
-                <div style={{ padding: "8px 8px 4px", borderTop: "1px solid " + C.bd, marginTop: 4, display: "flex", justifyContent: "center" }}>
+                    })
+                }
+                {isAdmin && category && (
+                  <div style={{ padding: "8px 8px 4px", borderTop: "1px solid " + C.bd, marginTop: 4, display: "flex", justifyContent: "center" }}>
+                    <button onClick={function() { setStep("admin"); setAdminGame(game); setAdminSection("cars"); setAdminCat(category); }} style={{ fontSize: 10, letterSpacing: 1, padding: "5px 12px", background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.35)", borderRadius: 3, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", cursor: "pointer" }}>⚑ MANAGE MODS</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {selectedCars.length > 0 && (!isMobile || !catOpen) && (
+              <div style={{ borderTop: "1px solid " + C.bd, background: C.sfc, padding: "12px 16px", flexShrink: 0, maxHeight: isMobile ? "none" : 210, overflowY: "auto" }}>
+                <div style={lblS}>WHAT THE ENGINEER KNOWS ABOUT {selectedCars.length > 1 ? "THESE CARS" : "THIS CAR"}</div>
+                {selectedCars.map(function(car) {
+                  var p = profiles[PW.profile.key(game, car)]; var cnt = PW.profile.count(p);
+                  var nLess = memory.lessons.filter(function(l) { return l.game === game && l.car === car; }).length;
+                  return (
+                    <div key={car} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, color: C.ts, flex: "1 1 150px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{car}</span>
+                      <span style={{ fontSize: 10.5, padding: "2px 9px", borderRadius: 10, border: "1px solid " + (p ? "rgba(34,197,94,0.4)" : "rgba(245,158,11,0.4)"), color: p ? C.ok : C.warn, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5 }}>{p ? "✓ " + cnt.editable + " EDITABLE PARAMETER" + (cnt.editable === 1 ? "" : "S") : "GENERIC PARAMETER LIST"}</span>
+                      {nLess > 0 && <span style={{ fontSize: 10.5, color: C.tm }}>{nLess} lesson{nLess > 1 ? "s" : ""}</span>}
+                      <button onClick={function() { openTeach(car); }} style={{ padding: "4px 11px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1, fontWeight: 700, cursor: "pointer" }}>{p ? "REFINE" : "TEACH"}</button>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 11.5, color: C.td, marginTop: 10, lineHeight: 1.5 }}>Teach the engineer once with screenshots of the car's setup screens: it then suggests only parameters that really exist and can be edited on that car.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Step 3: track ──
+    if (cfgStep === 2) {
+      wizBody = (
+        <div style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", minHeight: 0, paddingBottom: isMobile ? 84 : 0 }}>
+          <div style={{ flexShrink: 0, padding: "12px 20px", borderBottom: "1px solid " + C.bd, background: C.sfc, display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ ...lblS, flexShrink: 0 }}>TRACK</span>
+            <input placeholder="Search tracks..." value={trackFilter} onChange={function(e) { setTrackFilter(e.target.value); }} style={{ flex: 1, maxWidth: 360, minWidth: 0, padding: "7px 12px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 14 }} />
+            <span style={{ fontSize: 11, color: C.td, flexShrink: 0, fontFamily: "'Chakra Petch',sans-serif" }}>{fTrks.length}</span>
+          </div>
+          <div style={{ flex: 1, overflowY: isMobile ? "visible" : "auto", padding: "6px 8px 24px" }}>
+            <div style={{ maxWidth: 880, margin: "0 auto" }}>
+              {(function() {
+                var grouped = {}; var groupOrder = [];
+                fTrks.forEach(function(t) { var country = getTrackCountry(t); if (!grouped[country]) { grouped[country] = []; groupOrder.push(country); } grouped[country].push(t); });
+                groupOrder.sort();
+                if (!groupOrder.length) return <div style={{ padding: "40px 16px", color: C.td, fontSize: 14, textAlign: "center" }}>No track matches "{trackFilter}"</div>;
+                return groupOrder.map(function(country) {
+                  return (
+                    <div key={country}>
+                      <div style={{ padding: "12px 14px 3px", fontSize: 11, letterSpacing: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", textTransform: "uppercase", opacity: 0.75, borderBottom: "1px solid " + C.bd, marginBottom: 2 }}>{country}</div>
+                      {grouped[country].map(function(t) {
+                        var sel = track === t; var isMod = modTracksForGame.includes(t);
+                        return (
+                          <div key={t} style={{ display: "flex", alignItems: "center" }}>
+                            <button onClick={function() { setTrack(t); setTimeout(function() { setCfgStep(3); }, 140); }} style={{ flex: 1, textAlign: "left", padding: "11px 12px 11px 14px", marginBottom: 1, background: sel ? C.acg : "transparent", border: "none", borderLeft: "2px solid " + (sel ? C.ac : "transparent"), color: sel ? C.ac : C.ts, fontSize: 14, fontWeight: sel ? 500 : 400, cursor: "pointer", borderRadius: "0 4px 4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                              {t}
+                              {sel && <span style={{ marginLeft: "auto", fontSize: 12 }}>✓</span>}
+                              {isMod && <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.4)", borderRadius: 2, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif" }}>MOD</span>}
+                            </button>
+                            {isMod && <button onClick={function() { if (track === t) setTrack(""); removeModTrack(game, t); }} style={{ padding: "0 10px", background: "none", border: "none", color: C.td, cursor: "pointer", fontSize: 16, lineHeight: 1, flexShrink: 0 }} title="Remove MOD track">×</button>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()}
+              {isAdmin && (
+                <div style={{ padding: "12px 8px 4px", borderTop: "1px solid " + C.bd, marginTop: 8, display: "flex", justifyContent: "center" }}>
                   <button onClick={function() { setStep("admin"); setAdminGame(game); setAdminSection("tracks"); }} style={{ fontSize: 10, letterSpacing: 1, padding: "5px 12px", background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.35)", borderRadius: 3, color: "#c084fc", fontFamily: "'Chakra Petch',sans-serif", cursor: "pointer" }}>⚑ MANAGE MODS</button>
                 </div>
               )}
             </div>
           </div>
         </div>
+      );
+    }
 
-        {/* Footer: Session type + Laps + Conditions + Generate */}
-        <div className="pw-footer-bar" style={{ flexShrink: 0, borderTop: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", flexWrap: "wrap", padding: "0 20px", gap: 10, minHeight: 58 }}>
+    // ── Step 4: session ──
+    if (cfgStep === 3) {
+      var sumRows = [
+        ["Simulator", cg ? cg.name : "—", 0], ["Class", cfgClassName || "—", 1],
+        ["Car" + (selectedCars.length > 1 ? "s" : ""), selectedCars.length ? selectedCars.join(", ") : "—", 1], ["Track", track || "—", 2],
+        ["Session", sessionType === "qualifying" ? "Qualifying" : "Race" + (raceLaps ? " · " + raceLaps + " laps" : " · full distance"), 3], ["Conditions", condition, 3],
+      ];
+      wizBody = (
+        <div style={{ padding: isMobile ? "18px 14px 104px" : "28px 36px", overflowY: isMobile ? "visible" : "auto", height: isMobile ? "auto" : "100%" }}>
+          <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", gap: 32, flexDirection: isMobile ? "column" : "row", alignItems: "flex-start" }}>
+            <div style={{ flex: 1.25, minWidth: 0, width: "100%" }}>
+              <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 600, color: C.tx, marginBottom: 22 }}>Describe the session</div>
 
-          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>SESSION</span>
-          {["qualifying", "race"].map(function(st) {
-            var sel = sessionType === st;
+              <div style={lblS}>SESSION TYPE</div>
+              <div style={{ display: "flex", gap: 10, marginTop: 10, marginBottom: 22, flexWrap: "wrap" }}>
+                {[["qualifying", "QUALIFYING", "Single-lap pace"], ["race", "RACE", "Tyre life and fuel"]].map(function(o) {
+                  var sel = sessionType === o[0];
+                  return (
+                    <button key={o[0]} onClick={function() { setSessionType(o[0]); }} style={{ flex: "1 1 180px", textAlign: "left", padding: "13px 16px", background: sel ? C.acg : C.sf, border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 5, cursor: "pointer" }}>
+                      <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: sel ? C.ac : C.ts }}>{o[1]}</div>
+                      <div style={{ fontSize: 12, color: C.tm, marginTop: 3 }}>{o[2]}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {sessionType === "race" && (
+                <div style={{ marginBottom: 22 }}>
+                  <div style={lblS}>RACE LENGTH (LAPS) <span style={{ color: C.td, letterSpacing: 0.5, textTransform: "none" }}>— optional, enables a pit-stop plan</span></div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    {[5, 10, 15, 20, 30, 50].map(function(n) {
+                      return <button key={n} onClick={function() { setRaceLaps(String(raceLaps) === String(n) ? "" : String(n)); }} style={chipS(String(raceLaps) === String(n))}>{n}</button>;
+                    })}
+                    <input type="number" min="1" max="9999" value={raceLaps} onChange={function(e) { setRaceLaps(e.target.value); }} placeholder="Other"
+                      style={{ width: 84, padding: "9px 8px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 14, textAlign: "center" }} />
+                  </div>
+                </div>
+              )}
+
+              <div style={lblS}>CONDITIONS</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, marginBottom: 22, flexWrap: "wrap" }}>
+                {CONDITIONS.map(function(c2) { return <button key={c2} onClick={function() { setCondition(c2); }} style={chipS(condition === c2)}>{c2}</button>; })}
+              </div>
+
+              <div style={lblS}>DRIVER NOTES <span style={{ color: C.td, letterSpacing: 0.5, textTransform: "none" }}>— optional</span></div>
+              <textarea value={driverNotes} onChange={function(e) { setDriverNotes(e.target.value.slice(0, 600)); }} rows={3}
+                placeholder="Anything the engineer should know? e.g. “Understeer on turn-in in slow corners; I prefer a stable rear.”"
+                style={{ width: "100%", marginTop: 10, resize: "vertical", padding: "11px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 14, lineHeight: 1.6 }} />
+              <div style={{ fontSize: 11, color: C.td, textAlign: "right", marginTop: 4 }}>{driverNotes.length}/600</div>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0, width: "100%", background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "20px 22px" }}>
+              <div style={{ ...lblS, color: canGo ? C.ac : C.warn, marginBottom: 14 }}>{canGo ? "READY TO GENERATE" : "ALMOST THERE"}</div>
+              {sumRows.map(function(r) {
+                return (
+                  <div key={r[0]} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0", borderBottom: "1px solid " + C.bd }}>
+                    <span style={{ width: 86, flexShrink: 0, fontSize: 12, color: C.td }}>{r[0]}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: r[1] === "—" ? C.warn : C.tx, wordBreak: "break-word" }}>{r[1]}</span>
+                    <button onClick={function() { goStep(r[2]); }} style={{ background: "none", border: "none", color: C.ac, fontSize: 11, cursor: "pointer", fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, flexShrink: 0 }}>{r[1] === "—" ? "CHOOSE" : "EDIT"}</button>
+                  </div>
+                );
+              })}
+              {(wizLessons.length > 0 || wizRef) && (
+                <div style={{ marginTop: 14, padding: "10px 12px", background: C.acs, border: "1px solid " + C.bd, borderLeft: "2px solid " + C.ac, borderRadius: 3, fontSize: 12.5, color: C.ts, lineHeight: 1.55 }}>
+                  {wizLessons.length > 0 && <div>The engineer will apply <b style={{ color: C.tx }}>{wizLessons.length} lesson{wizLessons.length > 1 ? "s" : ""}</b> from your earlier feedback.</div>}
+                  {wizRef && <div>It will start from your <b style={{ color: C.tx }}>{wizRef.baseline.stars}★ setup</b>{wizRef.exactTrack ? " for this track" : " at " + wizRef.baseline.track}.</div>}
+                </div>
+              )}
+              {!canGo && <div style={{ marginTop: 14, fontSize: 12.5, color: C.warn }}>Missing: {wizMissing.join(", ")}.</div>}
+              <button data-testid="wiz-generate" onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ width: "100%", marginTop: 18, padding: "15px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 4, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: 2, cursor: canGo ? "pointer" : "not-allowed", opacity: canGo ? 1 : 0.5 }}>GENERATE SETUP</button>
+              <button data-testid="wiz-manual" onClick={canGo ? startManualSession : undefined} disabled={!canGo} style={{ width: "100%", marginTop: 10, padding: "11px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 4, color: canGo ? C.ts : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, letterSpacing: 1.5, cursor: canGo ? "pointer" : "not-allowed", opacity: canGo ? 1 : 0.4 }}>CREATE MANUALLY</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ height: isMobile ? "auto" : "100%", minHeight: isMobile ? "100vh" : "auto", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <Header />
+
+        {/* Stepper: where you are, what is chosen, jump anywhere */}
+        <div className="pw-wiz-stepper" style={{ display: "flex", alignItems: "stretch", background: C.sf, borderBottom: "1px solid " + C.bd, flexShrink: 0 }}>
+          {wizLabels.map(function(lb, i) {
+            var act = cfgStep === i; var done = wizDone[i];
             return (
-              <button key={st} onClick={function() { setSessionType(st); }} style={{ padding: "6px 14px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 12, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
-                {st === "qualifying" ? "QUALIFYING" : "RACE"}
+              <button key={lb} data-testid={"wiz-step-" + i} onClick={function() { goStep(i); }} disabled={i > 0 && !game} style={{ flex: isMobile ? 1 : "0 1 250px", minWidth: 0, display: "flex", alignItems: "center", gap: isMobile ? 6 : 11, padding: isMobile ? "9px 5px" : "11px 20px", background: act ? "rgba(249,115,22,0.05)" : "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), borderRight: isMobile ? "none" : "1px solid " + C.bd, cursor: (i > 0 && !game) ? "not-allowed" : "pointer", opacity: (i > 0 && !game) ? 0.45 : 1, textAlign: "left" }}>
+                <span style={{ width: isMobile ? 18 : 24, height: isMobile ? 18 : 24, flexShrink: 0, borderRadius: "50%", border: "1px solid " + (done ? C.ok : act ? C.ac : C.td), background: done ? "rgba(34,197,94,0.14)" : "transparent", color: done ? C.ok : act ? C.ac : C.td, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isMobile ? 9 : 11, fontWeight: 700, fontFamily: "'Chakra Petch',sans-serif" }}>{done ? "✓" : i + 1}</span>
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ display: "block", fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 8.5 : 10, letterSpacing: isMobile ? 1 : 2, color: act ? C.ac : C.td }}>{lb}</span>
+                  <span style={{ display: "block", fontSize: isMobile ? 10.5 : 12.5, color: done ? C.tx : C.tm, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 }}>{wizSummary[i]}</span>
+                </span>
               </button>
             );
           })}
-
-          {sessionType === "race" && (
-            <>
-              <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0, marginLeft: 4 }}>LAPS</span>
-              <input type="number" min="1" max="9999" value={raceLaps} onChange={function(e) { setRaceLaps(e.target.value); }} placeholder="0"
-                style={{ width: 66, padding: "6px 8px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 14, textAlign: "center" }} />
-            </>
-          )}
-
-          <div style={{ width: 1, height: 22, background: C.bd, flexShrink: 0, margin: "0 4px" }} />
-
-          <span style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, flexShrink: 0 }}>CONDITIONS</span>
-          {CONDITIONS.map(function(c) {
-            var sel = condition === c;
-            return (
-              <button key={c} onClick={function() { setCondition(c); }} style={{ padding: "6px 12px", background: sel ? C.acg : "transparent", border: "1px solid " + (sel ? C.ac : C.bd), borderRadius: 3, color: sel ? C.ac : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: isMobile ? 11 : 11, fontWeight: sel ? 600 : 400, letterSpacing: 0.5, flexShrink: 0 }}>
-                {isMobile ? c.split(" /")[0] : c}
-              </button>
-            );
-          })}
-
-          <div style={{ flex: 1 }} />
-
-          {canGo && !isMobile && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 14, fontSize: 12, color: C.tm, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>
-              <span style={{ color: C.td }}>{selectedCars.length} car{selectedCars.length !== 1 ? "s" : ""}</span>
-              <span style={{ color: C.td }}>·</span>
-              <span style={{ color: C.ts }}>{track.length > 30 ? track.slice(0, 28) + "…" : track}</span>
-              <span style={{ color: C.td }}>·</span>
-              <span style={{ color: C.ac }}>{sessionType === "qualifying" ? "QUALI" : "RACE" + (raceLaps ? " " + raceLaps + "L" : "")}</span>
+          {!isMobile && <div style={{ flex: 1 }} />}
+          {!isMobile && (
+            <div style={{ display: "flex", alignItems: "center", padding: "0 18px", gap: 10, flexShrink: 0 }}>
+              {canGo
+                ? <button data-testid="wiz-generate-top" onClick={startSession} style={{ padding: "10px 22px", background: C.ac, border: "none", borderRadius: 3, color: "#000", fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 2, cursor: "pointer" }}>GENERATE SETUP</button>
+                : <span style={{ fontSize: 11.5, color: C.td }}>Missing: {wizMissing.join(", ")}</span>}
             </div>
           )}
-
-          <button onClick={canGo ? startManualSession : undefined} disabled={!canGo} style={{ padding: "12px 18px", background: "transparent", border: "1px solid " + (canGo ? C.bd : C.bd), borderRadius: 3, color: canGo ? C.ts : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 600, fontSize: 11, letterSpacing: 1.5, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0, width: isMobile ? "100%" : "auto" }}>
-            MANUAL
-          </button>
-          <button onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ padding: "12px 24px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 3, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 2, cursor: canGo ? "pointer" : "not-allowed", textTransform: "uppercase", opacity: canGo ? 1 : 0.3, flexShrink: 0, width: isMobile ? "100%" : "auto" }}>
-            GENERATE SETUP
-          </button>
         </div>
 
-        <Toast /><DiscardModal />
+        {/* Active step */}
+        <div data-testid="wiz-body" style={{ flex: 1, minHeight: 0, overflow: isMobile ? "visible" : "hidden" }}>{wizBody}</div>
+
+        {/* Navigation only — no fields down here */}
+        <div className="pw-wiz-nav" style={{ flexShrink: 0, borderTop: "1px solid " + C.bd, background: C.sf, display: "flex", alignItems: "center", gap: 12, padding: isMobile ? "10px 12px" : "11px 24px" }}>
+          <button data-testid="wiz-back" onClick={function() { setCfgStep(Math.max(0, cfgStep - 1)); }} disabled={cfgStep === 0} style={{ padding: "10px 18px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: cfgStep === 0 ? C.td : C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1.5, cursor: cfgStep === 0 ? "not-allowed" : "pointer", opacity: cfgStep === 0 ? 0.4 : 1, flexShrink: 0 }}>← BACK</button>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.tm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{navHint}</div>
+          {cfgStep < 3 && (
+            <button data-testid="wiz-next" onClick={nextStep} disabled={!canNext} style={{ padding: "11px 24px", background: canNext ? C.ac : C.bd, border: "none", borderRadius: 3, color: canNext ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 1.5, cursor: canNext ? "pointer" : "not-allowed", opacity: canNext ? 1 : 0.5, flexShrink: 0 }}>NEXT: {nextLabel} →</button>
+          )}
+          {cfgStep === 3 && isMobile && (
+            <button data-testid="wiz-generate-nav" onClick={canGo ? startSession : undefined} disabled={!canGo} style={{ padding: "11px 20px", background: canGo ? C.ac : C.bd, border: "none", borderRadius: 3, color: canGo ? "#000" : C.td, fontFamily: "'Chakra Petch',sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 1.5, opacity: canGo ? 1 : 0.5, flexShrink: 0 }}>GENERATE</button>
+          )}
+        </div>
+
+        <Toast /><DiscardModal />{renderTeachModal()}
+      </div>
+    );
+  }
+
+  // ── ENGINEER MEMORY ───────────────────────────────────────────────────────────
+  if (step === "memory") {
+    var kindMeta = { avoid: ["AVOID", C.danger], fix: ["FIX · WORKED", C.ok], preference: ["PREFERENCE", "#60a5fa"], unavailable: ["UNAVAILABLE", "#c084fc"], range: ["RANGE", "#38bdf8"], note: ["NOTE", C.tm] };
+    var gameShort = function(k) { return k && GAMES[k] ? (GAMES[k].short || GAMES[k].name) : ""; };
+    var scopeText = function(l) {
+      var catName = l.cat && GAMES[l.game] && GAMES[l.game].categories[l.cat] ? GAMES[l.game].categories[l.cat].name : l.cat;
+      return [gameShort(l.game), catName, l.car, l.track].filter(Boolean).join(" › ") || "Everything I drive";
+    };
+    var lessonsShown = memory.lessons.filter(function(l) {
+      if (memFilter.game && (l.game || "") !== memFilter.game) return false;
+      if (memFilter.kind && l.kind !== memFilter.kind) return false;
+      if (memFilter.q && (l.text + " " + l.car + " " + l.track + " " + (l.params || []).join(" ")).toLowerCase().indexOf(memFilter.q.toLowerCase()) < 0) return false;
+      return true;
+    }).slice().sort(function(a2, b2) { return b2.ts - a2.ts; });
+    var profileList = Object.keys(profiles).map(function(k) { return profiles[k]; }).filter(Boolean).sort(function(a2, b2) { return String(b2.updated).localeCompare(String(a2.updated)); });
+    var baselineList = memory.baselines.slice().sort(function(a2, b2) { return b2.ts - a2.ts; });
+    var cloudMissing = cloud.memoryMissing || cloud.profilesMissing;
+    var selS = { padding: "8px 10px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.tx, fontSize: 13 };
+    var tabBtn = function(key, label, n) {
+      var act = memTab === key;
+      return <button key={key} onClick={function() { setMemTab(key); }} style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11.5, fontWeight: act ? 700 : 500, letterSpacing: 1.5, cursor: "pointer", marginBottom: -1 }}>{label} <span style={{ opacity: 0.7 }}>{n}</span></button>;
+    };
+    var delBtn = { padding: "3px 9px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontSize: 12, cursor: "pointer", flexShrink: 0 };
+    var scopeLabelNow = function(sc) {
+      var cn = category ? (cc ? cc.name : (customCategoriesForGame[category] || category)) : "";
+      if (sc === "driver") return "Everything I drive";
+      if (sc === "game") return game ? "This simulator (" + gameShort(game) + ")" : "This simulator (pick one in CONFIG)";
+      if (sc === "category") return cn ? "This class (" + cn + ")" : "This class (pick one in CONFIG)";
+      if (sc === "car") return selectedCars.length === 1 ? "This car (" + selectedCars[0] + ")" : "This car (pick ONE car in CONFIG)";
+      return selectedCars.length === 1 && track ? "This car at this track (" + track + ")" : "This car at this track (pick them in CONFIG)";
+    };
+    var addManualRule = function() {
+      var text = ruleDraft.text.trim();
+      if (text.length < 6) { setToast("Write the rule as a full sentence"); return; }
+      var sc = ruleDraft.scope;
+      if (sc !== "driver" && !game) { setToast("Pick a simulator in CONFIG first"); return; }
+      if (sc === "category" && !category) { setToast("Pick a class in CONFIG first"); return; }
+      if ((sc === "car" || sc === "track") && selectedCars.length !== 1) { setToast("Pick exactly one car in CONFIG first"); return; }
+      if (sc === "track" && !track) { setToast("Pick a track in CONFIG first"); return; }
+      var r = PW.memory.add(memoryRef.current, [{ kind: ruleDraft.kind, scope: sc, text: text, pending: false }], { game: game, cat: category, cars: selectedCars, track: track }, "manual");
+      commitMemory(r.mem); setRuleDraft(Object.assign({}, ruleDraft, { text: "" })); setToast(r.added.length ? "Rule added" : "Already known — strengthened");
+    };
+    return (
+      <div style={{ height: isMobile ? "auto" : "100%", minHeight: isMobile ? "100vh" : "auto", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
+        <Header />
+        <div style={{ flex: 1, overflowY: isMobile ? "visible" : "auto", padding: isMobile ? "18px 14px 40px" : "28px 36px 40px" }}>
+          <div style={{ maxWidth: 960, margin: "0 auto" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap", marginBottom: 8 }}>
+              <div style={{ fontSize: isMobile ? 19 : 23, fontWeight: 600 }}>Engineer memory</div>
+              <span style={{ fontSize: 11.5, color: cloud.memory === "cloud" ? C.ok : C.warn, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 0.5 }}>{cloud.memory === "cloud" ? "☁ Synced to your account" : "💾 Stored on this device only"}</span>
+            </div>
+            <p style={{ fontSize: 13.5, color: C.ts, lineHeight: 1.65, maxWidth: 760, marginBottom: 14 }}>Everything the engineer has learned from your feedback and ratings. It is applied automatically to every new setup for the same car, class, track or simulator. Delete anything that is wrong.</p>
+            {cloudMissing && (
+              <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, fontSize: 12.5, color: C.warn, lineHeight: 1.55, marginBottom: 16 }}>
+                Cloud storage for memory and car profiles is not set up yet, so they live in this browser only. {isAdmin ? "Open ADMIN → CLOUD for the one-time setup (a short SQL script)." : "Ask the administrator to enable cloud sync so they follow you across devices."}
+              </div>
+            )}
+            <div style={{ display: "flex", borderBottom: "1px solid " + C.bd, marginBottom: 18, overflowX: "auto" }}>
+              {tabBtn("lessons", "LESSONS", memory.lessons.length)}{tabBtn("baselines", "REFERENCE SETUPS", memory.baselines.length)}{tabBtn("profiles", "CAR PROFILES", profileList.length)}
+            </div>
+
+            {memTab === "lessons" && (
+              <div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                  <select value={memFilter.game} onChange={function(e) { var v = e.target.value; setMemFilter(function(f) { return Object.assign({}, f, { game: v }); }); }} style={selS}>
+                    <option value="">All simulators</option>
+                    {Object.keys(GAMES).map(function(k) { return <option key={k} value={k}>{GAMES[k].name}</option>; })}
+                  </select>
+                  <select value={memFilter.kind} onChange={function(e) { var v = e.target.value; setMemFilter(function(f) { return Object.assign({}, f, { kind: v }); }); }} style={selS}>
+                    <option value="">All types</option>
+                    {Object.keys(kindMeta).map(function(k) { return <option key={k} value={k}>{kindMeta[k][0]}</option>; })}
+                  </select>
+                  <input placeholder="Search lessons..." value={memFilter.q} onChange={function(e) { var v = e.target.value; setMemFilter(function(f) { return Object.assign({}, f, { q: v }); }); }} style={{ ...selS, flex: 1, minWidth: 160 }} />
+                </div>
+                {lessonsShown.length === 0 && (
+                  <div style={{ padding: "34px 16px", textAlign: "center", color: C.td, fontSize: 13.5, border: "1px dashed " + C.bd, borderRadius: 4, marginBottom: 16 }}>
+                    {memory.lessons.length === 0 ? "Nothing learned yet. Generate a setup, test it, send feedback — the engineer records what worked and what did not." : "No lesson matches these filters."}
+                  </div>
+                )}
+                {lessonsShown.map(function(l) {
+                  var km = kindMeta[l.kind] || kindMeta.note;
+                  var unverified = l.kind === "fix" && l.pending;
+                  var col = unverified ? C.warn : km[1];
+                  return (
+                    <div key={l.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "12px 14px", background: C.sf, border: "1px solid " + C.bd, borderLeft: "2px solid " + col, borderRadius: 3, marginBottom: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 9.5, letterSpacing: 1, padding: "1px 7px", border: "1px solid " + col, borderRadius: 2, color: col, fontFamily: "'Chakra Petch',sans-serif" }}>{unverified ? "UNVERIFIED FIX" : km[0]}</span>
+                          <span style={{ fontSize: 11.5, color: C.tm }}>{scopeText(l)}</span>
+                          {l.strength > 1 && <span style={{ fontSize: 11, color: C.td }}>confirmed ×{l.strength}</span>}
+                        </div>
+                        <div style={{ fontSize: 14, color: C.tx, lineHeight: 1.55 }}>{l.text}</div>
+                        {l.params && l.params.length > 0 && <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>{l.params.map(function(p, i) { return <span key={i} style={{ fontSize: 11, padding: "1px 7px", borderRadius: 10, border: "1px solid " + C.bd, color: C.ts }}>{p}</span>; })}</div>}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, color: C.td }}>{new Date(l.ts).toLocaleDateString("en-GB")}</span>
+                        <button onClick={function() { commitMemory(PW.memory.remove(memoryRef.current, l.id)); }} style={delBtn} title="Delete this lesson">✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ marginTop: 22, padding: "16px 18px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 5 }}>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10.5, letterSpacing: 2, color: C.td, marginBottom: 10 }}>TEACH A RULE YOURSELF</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                    <select value={ruleDraft.kind} onChange={function(e) { var v = e.target.value; setRuleDraft(function(r) { return Object.assign({}, r, { kind: v }); }); }} style={selS}>
+                      <option value="preference">Preference</option><option value="avoid">Avoid</option><option value="unavailable">Parameter not available</option><option value="range">Limit / range</option><option value="fix">Fix that works</option>
+                    </select>
+                    <select value={ruleDraft.scope} onChange={function(e) { var v = e.target.value; setRuleDraft(function(r) { return Object.assign({}, r, { scope: v }); }); }} style={{ ...selS, flex: 1, minWidth: 200 }}>
+                      {["driver", "game", "category", "car", "track"].map(function(sc) { return <option key={sc} value={sc}>{scopeLabelNow(sc)}</option>; })}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={ruleDraft.text} onChange={function(e) { var v = e.target.value; setRuleDraft(function(r) { return Object.assign({}, r, { text: v.slice(0, 200) }); }); }} onKeyDown={function(e) { if (e.key === "Enter") addManualRule(); }} placeholder="e.g. The rear wing has only 8 steps on this car." style={{ ...selS, flex: 1, minWidth: 0 }} />
+                    <button onClick={addManualRule} style={{ padding: "8px 18px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: "pointer", flexShrink: 0 }}>ADD</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {memTab === "baselines" && (
+              <div>
+                <p style={{ fontSize: 13, color: C.tm, lineHeight: 1.6, marginBottom: 14 }}>Setups you rated 4★ or 5★. The next setup for the same car starts from them.</p>
+                {baselineList.length === 0 && <div style={{ padding: "34px 16px", textAlign: "center", color: C.td, fontSize: 13.5, border: "1px dashed " + C.bd, borderRadius: 4 }}>No reference setups yet — rate a setup 4★ or 5★ in the ENGINEER tab.</div>}
+                {baselineList.map(function(b2) {
+                  var open = openBaseline === b2.id;
+                  return (
+                    <div key={b2.id} style={{ background: C.sf, border: "1px solid " + C.bd, borderRadius: 3, marginBottom: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", flexWrap: "wrap" }}>
+                        <span style={{ color: C.ac, fontSize: 15, letterSpacing: 1 }}>{"★".repeat(b2.stars)}</span>
+                        <div style={{ flex: 1, minWidth: 180 }}>
+                          <div style={{ fontSize: 14, color: C.tx }}>{(b2.cars || []).join(", ")} · {b2.track}</div>
+                          <div style={{ fontSize: 11.5, color: C.tm }}>{gameShort(b2.game)} · {b2.sess === "qualifying" ? "Qualifying" : "Race"} · {b2.cond}{b2.tag ? " · " + b2.tag : ""} · {b2.params.length} parameters · {new Date(b2.ts).toLocaleDateString("en-GB")}</div>
+                        </div>
+                        <button onClick={function() { setOpenBaseline(open ? "" : b2.id); }} style={{ ...delBtn, color: C.ts, padding: "4px 12px", fontSize: 11, letterSpacing: 1, fontFamily: "'Chakra Petch',sans-serif" }}>{open ? "HIDE" : "VIEW"}</button>
+                        <button onClick={function() { var m2 = PW.memory.sanitize(memoryRef.current); m2.baselines = m2.baselines.filter(function(x) { return x.id !== b2.id; }); m2.updated = new Date().toISOString(); commitMemory(m2); }} style={delBtn} title="Delete">✕</button>
+                      </div>
+                      {open && (
+                        <div style={{ padding: "4px 14px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "2px 22px", fontSize: 12.5 }}>
+                          {b2.params.map(function(p, i) { return <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "3px 0", borderBottom: "1px solid " + C.bd }}><span style={{ color: C.tm, minWidth: 0 }}>{p.g ? p.g.split(" › ").pop() + " · " : ""}{p.n}</span><span style={{ color: C.tx, flexShrink: 0 }}>{p.v}</span></div>; })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {memTab === "profiles" && (
+              <div>
+                <p style={{ fontSize: 13, color: C.tm, lineHeight: 1.6, marginBottom: 14 }}>Parameter lists read from the game's own setup screens. Shared by everyone using this app. Add a car from the CAR step of CONFIG (TEACH button).</p>
+                {profileList.length === 0 && <div style={{ padding: "34px 16px", textAlign: "center", color: C.td, fontSize: 13.5, border: "1px dashed " + C.bd, borderRadius: 4 }}>No car has been taught yet.</div>}
+                {profileList.map(function(p) {
+                  var c2 = PW.profile.count(p);
+                  return (
+                    <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: C.sf, border: "1px solid " + C.bd, borderLeft: "2px solid " + C.ok, borderRadius: 3, marginBottom: 6, flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ fontSize: 14.5, color: C.tx }}>{p.car}</div>
+                        <div style={{ fontSize: 11.5, color: C.tm }}>{gameShort(p.game)} · {c2.editable} editable · {c2.fixed} fixed · {p.tabs.map(function(t) { return t.name; }).join(", ")} · updated {new Date(p.updated).toLocaleDateString("en-GB")}</div>
+                      </div>
+                      <button onClick={function() { openTeach2(p); }} style={{ padding: "5px 13px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 3, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 10.5, letterSpacing: 1, fontWeight: 700, cursor: "pointer" }}>REFINE</button>
+                      <button onClick={function() { if (confirm("Delete the verified parameter list for " + p.car + "?")) deleteProfileFor(p.key); }} style={delBtn} title="Delete">✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+        <Toast /><DiscardModal />{renderTeachModal()}
       </div>
     );
   }
@@ -4513,7 +5030,7 @@ function App() {
             </div>
           )}
         </div>
-        <Toast /><DiscardModal />
+        <Toast /><DiscardModal />{renderTeachModal()}
       </div>
     );
   }
@@ -4721,7 +5238,7 @@ function App() {
             )}
           </div>
         </div>
-        <Toast /><DiscardModal />
+        <Toast /><DiscardModal />{renderTeachModal()}
       </div>
     );
   }
@@ -4772,6 +5289,32 @@ function App() {
                 </div>
               )}
             </div>
+
+            {/* What the engineer knows about this session */}
+            {(function() {
+              var cx = sessionCtx(); if (!cx.game || !cx.cars.length) return null;
+              var nLess = PW.memory.recall(memory, cx).length; var ref = PW.memory.bestBaseline(memory, cx);
+              return (
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid " + C.bd }}>
+                  <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 2, color: C.td, marginBottom: 9, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>ENGINEER KNOWLEDGE</span>
+                    <button onClick={function() { setStep("memory"); }} style={{ background: "none", border: "none", color: C.ac, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: "'Chakra Petch',sans-serif" }}>VIEW</button>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: nLess ? C.ts : C.td, lineHeight: 1.55 }}>{nLess ? nLess + " lesson" + (nLess > 1 ? "s" : "") + " from your feedback apply here" : "No lessons yet — send feedback after testing"}</div>
+                  {ref && <div style={{ fontSize: 12.5, color: C.ts, marginTop: 4 }}>★ Reference: {ref.baseline.stars}★ setup{ref.exactTrack ? " for this track" : " at " + ref.baseline.track}</div>}
+                  {cx.cars.map(function(car) {
+                    var p = profiles[PW.profile.key(cx.game, car)];
+                    return (
+                      <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.tm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{car}</span>
+                        <span style={{ fontSize: 9.5, color: p ? C.ok : C.warn, letterSpacing: 0.5, flexShrink: 0 }}>{p ? "✓ VERIFIED" : "GENERIC"}</span>
+                        <button onClick={function() { openTeach(car); }} style={{ padding: "2px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.ac, fontSize: 9.5, letterSpacing: 1, fontFamily: "'Chakra Petch',sans-serif", cursor: "pointer", flexShrink: 0 }}>{p ? "REFINE" : "TEACH"}</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* Track Map */}
             {((game || (activeSetupSrc && activeSetupSrc.gameKey)) && (track || (activeSetupSrc && activeSetupSrc.track))) && (function() {
@@ -4889,6 +5432,7 @@ function App() {
             {/* Quick feedback */}
             <div style={{ padding: "10px 14px 4px", fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td }}>DRIVER FEEDBACK</div>
             <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+              <button onClick={function() { setInput("Some parameters you listed are not available on this car (locked or missing in the game): "); if (isMobile) setSidebarOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", marginBottom: 6, background: "rgba(192,132,252,0.07)", border: "1px solid rgba(192,132,252,0.3)", borderRadius: 3, color: "#c084fc", fontSize: 13, cursor: "pointer", lineHeight: 1.5 }}>A parameter is missing or locked on this car…</button>
               {qf.map(function(f, i) {
                 return (
                   <button key={i} onClick={function() { if (!loading) { skipScrollToBottomRef.current = true; scrollToTopAfterStreamRef.current = true; sendMsg(f); } if (isMobile) setSidebarOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", marginBottom: 2, background: "transparent", border: "1px solid transparent", borderRadius: 3, color: C.ts, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1, lineHeight: 1.5 }}>
@@ -4989,7 +5533,7 @@ function App() {
           </div>
         </div>
       </div>
-      <Toast /><DiscardModal />
+      <Toast /><DiscardModal />{renderTeachModal()}
     </div>
   );
 }
