@@ -82,15 +82,16 @@ const GAMES = {
   ams2: {
     name: "Automobilista 2", short: "AMS2",
     categories: {
-      gt3_modern: { name: "GT3 (Gen 2)", cars: ["Mercedes-AMG GT3 Evo","BMW M4 GT3","Porsche 992 GT3 R","McLaren 720S GT3 EVO","Aston Martin Vantage GT3 Evo"] },
+      gt3_modern: { name: "GT3 (Gen 2)", cars: ["Mercedes-AMG GT3 Evo","BMW M4 GT3","Porsche 992 GT3 R","McLaren 720S GT3 EVO","Aston Martin Vantage GT3 Evo","Audi R8 LMS GT3 Evo II","Corvette Z06 GT3.R"] },
       gt3_classic: { name: "GT3 (Gen 1)", cars: ["Mercedes-AMG GT3","BMW M6 GT3","Porsche 911 GT3 R (991)","McLaren 720S GT3","Nissan GT-R Nismo GT3"] },
-      gt4: { name: "GT4", cars: ["Mercedes-AMG GT4","BMW M4 GT4","Porsche 718 Cayman GT4 CS MR","McLaren 570S GT4","Aston Martin Vantage GT4","Ginetta G55 GT4","Camaro GT4.R"] },
+      gt4: { name: "GT4", cars: ["Mercedes-AMG GT4","BMW M4 GT4","Porsche 718 Cayman GT4 CS MR","McLaren 570S GT4","Aston Martin Vantage GT4","Aston Martin Vantage GT4 Evo","Alpine A110 GT4 Evo","Ginetta G55 GT4","Camaro GT4.R"] },
       gt_open: { name: "GT Open", cars: ["Ginetta G55 GT3","Ultima GTR Race"] },
       gt1: { name: "GT1", cars: ["McLaren F1 GTR Longtail","Mercedes-Benz CLK LM","Porsche 911 GT1","Nissan R390 GT1"] },
-      gte: { name: "GTE", cars: ["Porsche 911 RSR-19","Chevrolet Corvette C8.R","BMW M8 GTE"] },
-      lmdh: { name: "LMDh / Hypercar", cars: ["Porsche 963","Cadillac V-Series.R","BMW M Hybrid V8","Alpine A242","Lamborghini SC63"] },
-      lmp1_modern: { name: "LMP1 / DPi (Modern)", cars: ["Cadillac DPi","Ginetta G58"] },
-      group_c: { name: "Group C", cars: ["Porsche 962C","Nissan R89C","Sauber C9","Corvette GTP"] },
+      gte: { name: "GTE", cars: ["Porsche 911 RSR-19","Chevrolet Corvette C8.R","BMW M8 GTE","Aston Martin Vantage GTE"] },
+      lmdh: { name: "LMDh / Hypercar", cars: ["Porsche 963","Cadillac V-Series.R","BMW M Hybrid V8","Alpine A424","Lamborghini SC63","Aston Martin Valkyrie (Hypercar)"] },
+      lmp2: { name: "LMP2", cars: ["Oreca 07 LMP2","Ligier JS P217"] },
+      prototype: { name: "Prototype (P2 / DPi)", cars: ["Cadillac DPi","Ginetta G58"] },
+      group_c: { name: "Group C", cars: ["Porsche 962C","Nissan R89C","Sauber C9","Corvette GTP (Group C)"] },
       brazilian_endurance: { name: "Brazilian Endurance (Império)", cars: ["MetalMoro AJR Chevy (P1)","MetalMoro AJR Honda (P1)","MetalMoro AJR Judd (P1)","MetalMoro AJR V6 (P1)","Sigma P1 (P2)","MCR S2000 (P4)","MetalMoro MRX Duratec (P2)","MetalMoro MRX Duratec (P3)","MetalMoro MRX Duratec (P4)","MetalMoro MRX Honda (P3)","Roco 001 (P3)"] },
       formula_modern: { name: "Formula Modern", cars: ["F-Ultimate Gen 1","F-Ultimate Gen 2","F-Hybrid Gen 1","F-Hybrid Gen 2","F-Hybrid Gen 3","F-V10 Gen 2","F-Reiza"] },
       formula_90s: { name: "Formula 90s", cars: ["F-Edge Model 1 (V12)","F-Edge Model 2 (V10)","F-Edge Model 3 (V8)","F-V10 Gen 1","McLaren MP4/12","McLaren MP4/6","McLaren MP4/5B","F-Classic Gen 3 Model 1","F-Classic Gen 3 Model 2","F-Classic Gen 3 Model 3","F-Classic Gen 3 Model 4","F-Classic Gen 4 Model 1","F-Classic Gen 4 Model 2","F-Classic Gen 4 Model 3"] },
@@ -114,29 +115,29 @@ const GAMES = {
       gt5: { name: "GT5", cars: ["Ginetta G40 GT5","Puma P052 GT5"] },
       brazilian_classics: { name: "Brazilian Classics / Historics", cars: ["Chevrolet Opala '79","Chevrolet Opala '86","Old Stock Opala","Fiat Uno (Copa Uno)","VW Fusca","VW Fusca HC1","VW Fusca HC2","VW Gol","VW Passat","Chevrolet Chevette CCB","Chevrolet Montana","Sprint Race","Mitsubishi Lancer R","Mitsubishi Lancer RS","BMW M1 Procar"] },
       vintage_tc: { name: "Vintage Touring Cars", cars: ["BMW 2002 Turbo","Mini Cooper S","Lotus 23","Chevrolet Corvette C3","Chevrolet Corvette C3 R","Mercedes-Benz 190E EVO 2 DTM (Group A)","BMW M3 Sport Evo Group A"] },
-      gt1_2005: { name: "GT1 2005 (FIA GT / Le Mans)", cars: ["Ferrari 550 Maranello GT1","Saleen S7-R","Dodge Viper GTS-R","Maserati MC12 GT1","Aston Martin DBR9"] },
-      gt2_2005: { name: "GT2 2005 (FIA GT / Le Mans)", cars: ["Porsche 911 GT3 RSR (996)","Ferrari 360 Modena GTC","Chevrolet Corvette C5.R"] },
-      lmp1_2005: { name: "LMP1 2005 (Le Mans)", cars: ["Bentley Speed 8","Audi R8 LMP","Pescarolo C60 Judd"] },
-      lmp2_2005: { name: "LMP2 2005 (Le Mans)", cars: ["Porsche RS Spyder","Acura ARX-01b","Lola B05/40 AER","Courage C65"] },
+      gt1_2005: { name: "GT1 2005", cars: ["Viper GTS-R","Aston Martin DBR9","Chevrolet Corvette C6.R","Maserati MC12 GT1","Lamborghini Murciélago R-GT","Lister Storm GTM","Saleen S7-R","Milano 55 GT1"] },
+      gt2_2005: { name: "GT2 2005", cars: ["Panoz Esperante GTLM","Spyker C8 GT2-R","TVR Tuscan T400R"] },
+      lmp1_2005: { name: "LMP1 2005", cars: ["Audi R8 LMP1","Courage C60","Dallara SP1"] },
+      lmp2_2005: { name: "LMP2 2005", cars: ["Lola B05/40 V8","Lola B05/40 Turbo"] },
       ligier: { name: "Ligier", cars: ["Ligier JS2-R","Ligier P4"] },
       lambo: { name: "Lamborghini", cars: ["Lamborghini Huracán Super Trofeo","Lamborghini Diablo Super Trophy"] },
     },
     tracks: [
       // ── BRAZIL ──────────────────────────────────────────────────────────────
-      "Interlagos","Interlagos 1976 (Classic)","Interlagos 1988 (Classic)",
+      "Interlagos","Interlagos 1976 (Classic)","Interlagos 1991 (Historic)","Interlagos 1993 (Historic)",
       "Goiânia","Cascavel","Curitiba","Velopark","Londrina","Santa Cruz do Sul",
       "Salvador","Curvelo","Velocittá","Jacarepaguá","Tarumã","Guaporé",
       // ── GERMANY ──────────────────────────────────────────────────────────────
-      "Nürburgring GP","Nürburgring Nordschleife","Nürburgring Nordschleife Tourist",
-      "Nürburgring 24H","Nürburgring 1971 (Historic)",
+      "Nürburgring GP","Nürburgring Nordschleife","Nürburgring Nordschleife Tourist","Nürburgring 24H",
+      "Nürburgring Nordschleife 1971 (Historic)","Nürburgring Südschleife 1971 (Historic)","Nürburgring Gesamtstrecke 1971 (Historic)",
       "Hockenheimring GP","Hockenheimring National",
+      "Hockenheimring 1977 (Historic)","Hockenheimring 1988 (Historic)","Hockenheimring 2001 (Historic)",
       // ── BELGIUM ──────────────────────────────────────────────────────────────
-      "Spa-Francorchamps","Spa-Francorchamps 1966 (Historic)","Spa-Francorchamps 1993 (Historic)",
+      "Spa-Francorchamps","Spa-Francorchamps 1971 (Historic)","Spa-Francorchamps 1993 (Historic)","Spa-Francorchamps 2005 (Historic)",
       "Zolder",
       // ── ITALY ────────────────────────────────────────────────────────────────
-      "Monza","Monza 1971 (with banking)","Monza 2005 (Historic)",
+      "Monza","Monza 1971 (with banking)","Monza 1991 (Historic)","Monza 2005 (Historic)",
       "Imola","Imola 1972 (Historic)","Imola 1988 (Historic)","Imola 2001 (Historic)","Imola 2005 (Historic)",
-      "Mugello",
       // ── UNITED KINGDOM ───────────────────────────────────────────────────────
       "Silverstone GP","Silverstone International","Silverstone National",
       "Silverstone 1975 (Historic)","Silverstone 1991 (Historic)","Silverstone 2001 (Historic)",
@@ -146,47 +147,39 @@ const GAMES = {
       "Oulton Park International","Oulton Park Fosters",
       "Cadwell Park",
       // ── AUSTRALIA ────────────────────────────────────────────────────────────
-      "Bathurst (Mount Panorama)",
+      "Bathurst (Mount Panorama)","Bathurst 1983 (Historic)",
       "Adelaide 1988","Adelaide 1991",
       // ── JAPAN ────────────────────────────────────────────────────────────────
-      "Suzuka","Suzuka 1977 (Historic)",
+      "Suzuka",
       // ── SOUTH AFRICA ─────────────────────────────────────────────────────────
-      "Kyalami","Kyalami 1976 (Classic)","Kyalami 1992 (Historic)",
+      "Kyalami","Kyalami 1976 (Classic)",
       // ── SPAIN ────────────────────────────────────────────────────────────────
       "Barcelona-Catalunya","Barcelona-Catalunya 1991 (Chicane)",
       "Barcelona 1999 (Historic)","Barcelona 2001 (Historic)",
-      "Jerez",
+      "Jerez","Jerez 1988 (Historic)",
       // ── AUSTRIA ──────────────────────────────────────────────────────────────
       "Spielberg (Red Bull Ring)","Spielberg Historic","Spielberg 2001 (Historic)",
       // ── HUNGARY ──────────────────────────────────────────────────────────────
       "Hungaroring",
       // ── NETHERLANDS ──────────────────────────────────────────────────────────
-      "Zandvoort","Zandvoort 1967 (Historic)",
+      "Zandvoort",
       // ── MONACO ───────────────────────────────────────────────────────────────
-      "Azure Circuit (Monaco)","Azure Circuit 1967 (Historic)","Azure Circuit 1980 (Historic)",
+      "Azure Circuit (Monaco)",
       // ── ARGENTINA ────────────────────────────────────────────────────────────
       "Buenos Aires No.6","Buenos Aires No.6S","Buenos Aires No.8","Buenos Aires No.15",
       // ── PORTUGAL ─────────────────────────────────────────────────────────────
-      "Estoril","Estoril 1984 (Historic)",
+      "Estoril (Cascais) 1988 (Historic)",
       // ── UNITED STATES ────────────────────────────────────────────────────────
       "Watkins Glen","Long Beach","Laguna Seca",
       "Daytona Road Course","Daytona Tri-Oval",
       "Sebring","Road America","Mid-Ohio",
-      "Indianapolis Road Course","Indianapolis Oval","Indianapolis 2001 (Historic)",
+      "Indianapolis Road Course","Indianapolis Oval","Indianapolis 2001 (Historic)","Indianapolis 2001 Oval (Historic)",
       "Pocono Raceway","Fontana Oval","Fontana Oval Historic",
+      "Road Atlanta 2005 (Historic)",
       // ── CANADA ───────────────────────────────────────────────────────────────
-      "Montreal (Circuit Gilles Villeneuve)","Montreal 1967 (St Jovite / Mont-Tremblant — Historic)",
-      // ── MEXICO ───────────────────────────────────────────────────────────────
-      "Mexico City (Autodromo Hermanos Rodriguez)","Mexico City 1970 (Historic)",
+      "Montreal 1991 (Historic)",
       // ── FRANCE ───────────────────────────────────────────────────────────────
-      "Le Mans (Circuit de la Sarthe)",
-      "Paul Ricard","Paul Ricard 1975 (Historic)",
-      "Rouen-Les-Essarts (Historic)",
-      "Reims-Gueux (Historic)",
-      // ── PORTUGAL / AZORES ────────────────────────────────────────────────────
-      "Terceira Island",
-      // ── MACAU ────────────────────────────────────────────────────────────────
-      "Guia Circuit (Macau)","Guia Circuit 1967 (Macau Historic)",
+      "Le Mans (Circuit de la Sarthe)","Le Mans 2005 (Historic)",
     ],
   },
   iracing: {
@@ -242,85 +235,98 @@ const GAMES = {
   f1_25: {
     name: "F1 25", short: "F1 25",
     categories: {
-      f1_2025: { name: "F1 2025 Cars", cars: ["Red Bull Racing RB21","Ferrari SF-25","Mercedes AMG W16","McLaren MCL39","Aston Martin AMR25","Alpine A525","Williams FW47","RB VCARB 02","Haas VF-25","Kick Sauber C45"] },
-      f1_2026_dlc: { name: "F1 2026 Cars (DLC — New Regs)", cars: ["Red Bull Racing RB22","Ferrari SF-26","Mercedes AMG W17","McLaren MCL40","Aston Martin AMR26","Alpine A526","Williams FW48","RB VCARB 03","Haas VF-26","Audi F1 Team (Kick Sauber C46)"] },
-      f2_2025: { name: "F2 2025", cars: ["Dallara F2 2024 — ART Grand Prix","Dallara F2 2024 — Hitech","Dallara F2 2024 — MP Motorsport","Dallara F2 2024 — PREMA Racing","Dallara F2 2024 — PHM AIX Racing","Dallara F2 2024 — Rodin Carlin","Dallara F2 2024 — DAMS","Dallara F2 2024 — Invicta Racing","Dallara F2 2024 — Campos Racing","Dallara F2 2024 — Van Amersfoort Racing"] },
-      classic_f1: { name: "Classic F1 (Iconic Cars DLC)", cars: ["Ferrari F2004 (Schumacher)","McLaren MP4/4 (Senna)","Williams FW14B (Mansell)","Ferrari F1-2000 (Schumacher)","McLaren MP4/13 (Häkkinen)","Williams FW18 (Hill)","Benetton B195 (Schumacher)","McLaren MP4/6 (Senna)","Ferrari 312T (Lauda)","Lotus 72D (Fittipaldi)"] },
-      safety_car: { name: "Safety Car / Medical Car", cars: ["Mercedes-AMG GT Black Series (Safety Car)","AMG C 63 S E PERFORMANCE (Medical Car)"] },
+      f1_2025: { name: "F1 2025 Cars", cars: ["Red Bull Racing (RB21)","Ferrari (SF-25)","Mercedes (W16)","McLaren (MCL39)","Aston Martin (AMR25)","Alpine (A525)","Williams (FW47)","Racing Bulls (VCARB 02)","Haas (VF-25)","Kick Sauber (C45)"] },
+      f1_2026: { name: "F1 2026 Cars (2026 Season Pack)", cars: ["Red Bull Racing","Racing Bulls","McLaren","Mercedes (W17)","Ferrari (SF-26)","Aston Martin (AMR26)","Alpine (A526)","Williams (FW48)","Haas (VF-26)","Audi (R26)","Cadillac (MAC-26)"] },
+      f2: { name: "Formula 2", cars: ["Formula 2 (2025 season)"] },
     },
     tracks: [
-      // ── AUSTRALIA ──────────────────────────────────────────────────────────────
-      "Albert Park (Melbourne)",
-      // ── CHINA ──────────────────────────────────────────────────────────────────
+      // ── AUSTRALIA ──
+      "Albert Park Circuit (Melbourne)",
+      // ── CHINA ──
       "Shanghai International Circuit",
-      // ── JAPAN ──────────────────────────────────────────────────────────────────
+      // ── JAPAN ──
       "Suzuka Circuit",
-      // ── BAHRAIN ────────────────────────────────────────────────────────────────
+      // ── BAHRAIN ──
       "Bahrain International Circuit",
-      // ── SAUDI ARABIA ───────────────────────────────────────────────────────────
+      // ── SAUDI ARABIA ──
       "Jeddah Corniche Circuit",
-      // ── MIAMI (USA) ────────────────────────────────────────────────────────────
-      "Miami International Autodrome",
-      // ── ITALY ──────────────────────────────────────────────────────────────────
+      // ── USA ──
+      "Miami International Autodrome","Circuit of the Americas (Austin)","Las Vegas Strip Circuit",
+      // ── ITALY ──
       "Imola (Emilia Romagna GP)","Monza",
-      // ── MONACO ─────────────────────────────────────────────────────────────────
+      // ── MONACO ──
       "Circuit de Monaco",
-      // ── CANADA ─────────────────────────────────────────────────────────────────
-      "Circuit Gilles Villeneuve",
-      // ── SPAIN ──────────────────────────────────────────────────────────────────
-      "Circuit de Barcelona-Catalunya",
-      // ── AUSTRIA ────────────────────────────────────────────────────────────────
+      // ── SPAIN ──
+      "Circuit de Barcelona-Catalunya","Madring (Madrid) — 2026 cars only",
+      // ── CANADA ──
+      "Circuit Gilles Villeneuve (Montreal)",
+      // ── AUSTRIA ──
       "Red Bull Ring",
-      // ── UNITED KINGDOM ─────────────────────────────────────────────────────────
+      // ── UNITED KINGDOM ──
       "Silverstone Circuit",
-      // ── HUNGARY ────────────────────────────────────────────────────────────────
+      // ── HUNGARY ──
       "Hungaroring",
-      // ── BELGIUM ────────────────────────────────────────────────────────────────
+      // ── BELGIUM ──
       "Circuit de Spa-Francorchamps",
-      // ── NETHERLANDS ────────────────────────────────────────────────────────────
+      // ── NETHERLANDS ──
       "Circuit Zandvoort",
-      // ── SINGAPORE ──────────────────────────────────────────────────────────────
+      // ── AZERBAIJAN ──
+      "Baku City Circuit",
+      // ── SINGAPORE ──
       "Marina Bay Street Circuit",
-      // ── USA ────────────────────────────────────────────────────────────────────
-      "Circuit of the Americas (Austin)","Las Vegas Strip Circuit",
-      // ── MEXICO ─────────────────────────────────────────────────────────────────
-      "Autodromo Hermanos Rodriguez",
-      // ── BRAZIL ─────────────────────────────────────────────────────────────────
+      // ── MEXICO ──
+      "Autódromo Hermanos Rodríguez (Mexico City)",
+      // ── BRAZIL ──
       "Interlagos (São Paulo)",
-      // ── QATAR ──────────────────────────────────────────────────────────────────
+      // ── QATAR ──
       "Lusail International Circuit",
-      // ── UNITED ARAB EMIRATES ───────────────────────────────────────────────────
+      // ── UNITED ARAB EMIRATES ──
       "Yas Marina Circuit (Abu Dhabi)",
     ],
   },
   acc: {
     name: "Assetto Corsa Competizione", short: "ACC",
     categories: {
-      gt3_2024: { name: "GT3 (2024 — Base)", cars: ["Porsche 992 GT3 R","Mercedes-AMG GT3 EVO","BMW M4 GT3","McLaren 720S GT3 EVO","Lamborghini Huracán GT3 EVO2","Audi R8 LMS GT3 EVO II","Ferrari 296 GT3","Ford Mustang GT3","Honda NSX GT3 EVO","Aston Martin Vantage GT3","Nissan GT-R Nismo GT3","Bentley Continental GT3 (2020)","Emil Frey Jaguar G3"] },
-      gt3_dlc: { name: "GT3 (DLC Cars)", cars: ["Lamborghini Huracán GT3 EVO (2019)","Aston Martin Vantage V8 GT3 (2019)","Porsche 911 GT3 R (2019)","McLaren 720S GT3 (2019)","BMW M6 GT3","Mercedes-AMG GT3 (2015)","Ferrari 488 GT3","Ferrari 488 GT3 EVO","Audi R8 LMS GT3 (2019)","Nissan GT-R Nismo GT3 (2015 / 2018)","Reiter Engineering Lamborghini R-EX","Callaway Competition Corvette Z06 GT3-R","Lexus RC F GT3","Acura NSX GT3 EVO 22","Lamborghini Huracán GT3 (2015)"] },
-      gt4: { name: "GT4 (DLC — British GT / Misano / SRO Esport)", cars: ["Porsche 718 Cayman GT4 Clubsport MR","McLaren 570S GT4","BMW M4 GT4","Mercedes-AMG GT4","Aston Martin Vantage GT4","Alpine A110 GT4","Ginetta G55 GT4","KTM X-BOW GT4","Maserati GranTurismo MC GT4","Audi R8 LMS GT4","Toyota GR Supra GT4","Chevrolet Camaro GT4.R","Lamborghini Huracán Super Trofeo EVO2 (GT4 spec)"] },
-      cup: { name: "Porsche Cup (DLC)", cars: ["Porsche 911 GT3 Cup (992)","Porsche 911 GT3 Cup (991 II)"] },
-      tcx: { name: "TCX (DLC)", cars: ["BMW M2 CS Racing"] },
+      gt3: { name: "GT3", cars: ["Aston Martin V8 Vantage GT3 (2019)","Audi R8 LMS (2015)","Audi R8 LMS Evo (2019)","Audi R8 LMS GT3 Evo II","Bentley Continental GT3 (2015)","Bentley Continental GT3 (2018)","BMW M6 GT3 (2017)","BMW M4 GT3","Callaway Corvette C7 GT3-R","Emil Frey Jaguar G3","Ferrari 488 GT3","Ferrari 488 GT3 Evo","Ferrari 296 GT3","Ford Mustang GT3","Honda NSX GT3","Honda NSX GT3 Evo","Lamborghini Huracán GT3 (2015)","Lamborghini Huracán GT3 Evo","Lamborghini Huracán GT3 Evo2","Lexus RC F GT3","McLaren 650S GT3","McLaren 720S GT3","McLaren 720S GT3 Evo","Mercedes-AMG GT3 (2015)","Mercedes-AMG GT3 Evo","Nissan GT-R Nismo GT3 (2015)","Nissan GT-R Nismo GT3 (2018)","Porsche 911 GT3 R (991)","Porsche 911 GT3 R (992)","Reiter Engineering R-EX GT3"] },
+      gt4: { name: "GT4 (GT4 Pack)", cars: ["Alpine A110 GT4","Aston Martin Vantage GT4","Audi R8 LMS GT4","BMW M4 GT4","Chevrolet Camaro GT4.R","Ginetta G55 GT4","KTM X-Bow GT4","Maserati GranTurismo MC GT4","McLaren 570S GT4","Mercedes-AMG GT4","Porsche 718 Cayman GT4 Clubsport"] },
+      gt2: { name: "GT2 (GT2 Pack)", cars: ["Audi R8 LMS GT2","KTM X-Bow GT2","Maserati MC20 GT2","Mercedes-AMG GT2","Porsche 935 (2019)","Porsche 911 GT2 RS CS Evo"] },
+      one_make: { name: "Challengers Pack / One-Make", cars: ["BMW M2 CS Racing","Ferrari 488 Challenge Evo","Lamborghini Huracán Super Trofeo EVO2","Porsche 911 GT3 Cup (992)"] },
     },
     tracks: [
-      // ── BASE TRACKS ────────────────────────────────────────────────────────────
-      "Monza","Spa-Francorchamps","Silverstone","Nürburgring GP","Misano World Circuit","Paul Ricard","Barcelona-Catalunya","Hungaroring","Zolder","Zandvoort","Brands Hatch","Donington Park","Snetterton","Oulton Park","Kyalami","Laguna Seca","Mount Panorama (Bathurst)",
-      // ── DLC TRACKS ─────────────────────────────────────────────────────────────
-      "Imola (DLC — 2020 pack)","Red Bull Ring (DLC — 2020 pack)","Suzuka (DLC — 2020 pack)","Indianapolis (DLC — 2021 pack)","Watkins Glen (DLC — 2021 pack)","Circuit de Catalunya (DLC — 2021 pack)","Circuit Zandvoort (DLC — 2021 pack)","Vallelunga (DLC — 2021 pack)","Nürburgring Nordschleife (DLC — 2023 pack)","Portimão (DLC — 2023 pack)","Valencia (DLC — 2023 pack)","Mugello (DLC — 2023 pack)","Hockenheimring (DLC — 2023 pack)",
+      // ── Base game ──
+      "Barcelona (Circuit de Barcelona-Catalunya)","Brands Hatch","Hungaroring","Misano","Monza","Nürburgring GP","Paul Ricard","Silverstone","Spa-Francorchamps","Zandvoort","Zolder",
+      // ── DLC ──
+      "Snetterton","Oulton Park","Donington Park",                       // British GT Pack
+      "Kyalami","Suzuka","Laguna Seca","Mount Panorama (Bathurst)",      // Intercontinental GT Pack
+      "Imola",                                                           // 2020 GT World Challenge Pack
+      "Watkins Glen","Circuit of the Americas","Indianapolis",           // American Track Pack
+      "Valencia (Circuit Ricardo Tormo)",                                // 2023 GT World Challenge Pack
+      "Red Bull Ring",                                                   // GT2 Pack
+      "Nürburgring Nordschleife",                                        // 24H Nürburgring Pack
     ],
   },
   pmr: {
     name: "Project Motor Racing", short: "PMR",
     categories: {
-      gt3: { name: "GT3", cars: ["Porsche 911 GT3 R (992)","McLaren 720S GT3 EVO","Mercedes-AMG GT3 EVO","BMW M4 GT3","Lamborghini Huracán GT3 EVO2","Ferrari 296 GT3","Aston Martin Vantage GT3","Ford Mustang GT3","Audi R8 LMS GT3 EVO II"] },
-      gt4: { name: "GT4", cars: ["Porsche 718 Cayman GT4 Clubsport MR","BMW M4 GT4","McLaren 570S GT4","Mercedes-AMG GT4","Aston Martin Vantage GT4","Alpine A110 GT4","Toyota GR Supra GT4","Audi R8 LMS GT4"] },
-      lmdh: { name: "LMDh / Hypercar", cars: ["Porsche 963","Cadillac V-Series.R","BMW M Hybrid V8","Peugeot 9X8","Ferrari 499P","Toyota GR010 Hybrid"] },
-      gte: { name: "GTE", cars: ["Porsche 911 RSR-19","Corvette C8.R GTE","Ferrari 488 GTE Evo","Aston Martin Vantage GTE"] },
-      lmp2: { name: "LMP2", cars: ["Oreca 07 Gibson"] },
-      tcr: { name: "TCR", cars: ["Audi RS 3 LMS Gen 2","Honda Civic Type-R TCR","Hyundai Elantra N TCR","Cupra Leon Competición TCR"] },
+      hypercar: { name: "LMDh / LMH Hypercar", cars: ["Porsche 963","Aston Martin Valkyrie","Acura ARX-06","BMW M Hybrid V8","Cadillac V-Series.R","Lamborghini SC63","Peugeot 9X8","Alpine A424","Toyota GR010 Hybrid"] },
+      gt3: { name: "GT3", cars: ["Acura NSX GT3 Evo 22","Aston Martin Vantage GT3","Audi R8 LMS GT3 Evo II","BMW M4 GT3 Evo","Chevrolet Corvette Z06 GT3.R","Ford Mustang GT3","Lamborghini Huracán GT3 Evo2","Mercedes-AMG GT3","Porsche 911 GT3 R (992)"] },
+      gt4: { name: "GT4", cars: ["Alpine A110 GT4","Aston Martin Vantage GT4","Audi R8 LMS GT4 Evo","BMW M4 GT4 Evo","Chevrolet Camaro ZL1 GT4.R","Ford Mustang GT4","Mercedes-AMG GT4","Nissan Z GT4","Porsche 718 Cayman GT4 Clubsport","Toyota GR Supra GT4 Evo"] },
+      mx5: { name: "MX-5", cars: ["Mazda MX-5 Cup (2017)"] },
+      gt: { name: "GT", cars: ["Aston Martin DBR9","Chevrolet Corvette C5.R","Chevrolet Corvette C6.R","Chrysler Viper GTS-R","Lister Storm","Lamborghini Murciélago R-GT","Maserati MC12 GT1","Saleen S7-R"] },
+      n_gt: { name: "N-GT", cars: ["BMW M3 GTR","Dodge Viper Competition Coupe","Gillet Vertigo","Marcos Mantara LM600","Morgan Aero8 GT(N)","Mosler MT900R","Porsche 911 GT3 RSR (996)","TVR T400R"] },
+      gt1: { name: "GT1", cars: ["Lotus Elise GT1","Mercedes-Benz CLK GTR / CLK LM","Nissan R390 GT1","Panoz Esperante GTR-1","Porsche 911 GT1-98","Toyota GT-One"] },
+      group_c: { name: "Group C", cars: ["Jaguar XJR-9","Mazda 787B","Nissan R89C","Porsche 962C","Mercedes-Benz Sauber C9"] },
     },
     tracks: [
-      "Spa-Francorchamps","Monza","Silverstone","Nürburgring GP","Brands Hatch","Donington Park","Snetterton","Oulton Park","Zandvoort","Zolder","Hungaroring","Red Bull Ring","Barcelona-Catalunya","Paul Ricard","Imola","Mugello","Portimão","Kyalami","Mount Panorama (Bathurst)","Laguna Seca","Watkins Glen","Road America","Indianapolis","Sebring",
+      // Licensed circuits use the in-game name with the real-world venue in parentheses.
+      "Brianza (Monza) — GP Circuit",
+      "Northampton (Silverstone) — GP Circuit","Northampton (Silverstone) — GP Circuit (Old Pit)","Northampton (Silverstone) — International Circuit",
+      "Derby (Donington Park) — GP Circuit","Derby (Donington Park) — National Circuit",
+      "Lexington (Mid-Ohio) — No Chicane","Lexington (Mid-Ohio) — Chicane",
+      "Lime Rock Park — No Chicanes","Lime Rock Park — West Chicane","Lime Rock Park — South Chicane",
+      "Canadian Tire Motorsport Park — GP Circuit",
+      "Spa-Francorchamps","Zolder","Daytona","Kyalami","Bathurst (Mount Panorama)","Nürburgring","Interlagos","Imola","Sebring","Red Bull Ring",
+      "Le Mans (Circuit de la Sarthe)",
     ],
   },
   rrre: {
@@ -382,7 +388,7 @@ var TRACK_COUNTRY_RULES = [
   // Monaco
   ["Monaco","Monaco"],["Azure","Monaco"],
   // Portugal
-  ["Portimão","Portugal"],["Estoril","Portugal"],
+  ["Portimão","Portugal"],["Estoril","Portugal"],["Cascais","Portugal"],
   // Japan
   ["Suzuka","Japan"],["Fuji","Japan"],["Motegi","Japan"],["Okayama","Japan"],["Tsukuba","Japan"],
   // Australia
@@ -406,9 +412,11 @@ var TRACK_COUNTRY_RULES = [
   ["Summit Point","USA"],["Lime Rock","USA"],["Road Atlanta","USA"],["Sonoma","USA"],
   ["Detroit","USA"],["Mount Washington","USA"],["Crandon","USA"],["Eldora","USA"],
   ["Williams Grove","USA"],["Knoxville","USA"],["Volusia","USA"],["Limaland","USA"],
-  ["Lucas Oil Speedway","USA"],["USA International","USA"],
+  ["Lucas Oil Speedway","USA"],["USA International","USA"],["Qualcomm","USA"],
   // Canada
-  ["Mosport","Canada"],["Canadian Tire","Canada"],
+  ["Mosport","Canada"],["Canadian Tire","Canada"],["Montreal","Canada"],["Gilles Villeneuve","Canada"],
+  // Mexico
+  ["Hermanos","Mexico"],["Mexico","Mexico"],
   // Middle East
   ["Bahrain","Bahrain"],["Jeddah","Saudi Arabia"],["Lusail","Qatar"],["Dubai","UAE"],
   // Asia
@@ -416,6 +424,8 @@ var TRACK_COUNTRY_RULES = [
   ["Macau","China / Macau"],
   // Singapore
   ["Marina Bay","Singapore"],["Singapore","Singapore"],
+  // Azerbaijan
+  ["Baku","Azerbaijan"],
   // Fictional
   ["RaceRoom Raceway","Fictional"],["Lakeview","Fictional"],
   // Australia (F1 25)
@@ -425,9 +435,13 @@ var TRACK_COUNTRY_RULES = [
   // UAE
   ["Yas Marina","UAE"],["Abu Dhabi","UAE"],
   // Spain (F1 / ACC)
-  ["Valencia","Spain"],
-  // Italy (ACC)
-  ["Vallelunga","Italy"],
+  ["Valencia","Spain"],["Ricardo Tormo","Spain"],["Madring","Spain"],["Madrid","Spain"],
+  // Italy (PMR licensed name)
+  ["Brianza","Italy"],
+  // United Kingdom (PMR licensed names)
+  ["Northampton","United Kingdom"],["Derby","United Kingdom"],
+  // USA (PMR licensed name)
+  ["Lexington","USA"],
 ];
 function getTrackCountry(name) {
   var n = name.toLowerCase();
