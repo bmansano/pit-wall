@@ -490,32 +490,41 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
 
   // ═════════════════════════ catalog: effective data with diff-based admin edits ═════════════════════════
   var C = PW.catalog = {};
-  function addUnique(list, name) { if (name && list.indexOf(name) < 0) list.push(name); }
+  function strList(a) { return Array.isArray(a) ? a.filter(function (x) { return typeof x === "string" && x; }) : []; }
+  function has(o, k) { return !!o && typeof o === "object" && Object.prototype.hasOwnProperty.call(o, k); }
+  function addUnique(list, name) { if (typeof name === "string" && name && list.indexOf(name) < 0) list.push(name); }
   function applyList(list, adds, removes, renames) {
-    var out = list.slice();
-    (adds || []).forEach(function (n) { addUnique(out, n); });
-    if (removes && removes.length) out = out.filter(function (n) { return removes.indexOf(n) < 0; });
-    if (renames) out = out.map(function (n) { return renames[n] != null ? renames[n] : n; });
-    var seen = {}; return out.filter(function (n) { if (seen[n]) return false; seen[n] = 1; return true; });
+    var out = strList(list);
+    strList(adds).forEach(function (n) { addUnique(out, n); });
+    var rm = strList(removes);
+    if (rm.length) out = out.filter(function (n) { return rm.indexOf(n) < 0; });
+    if (renames && typeof renames === "object") out = out.map(function (n) { return has(renames, n) && typeof renames[n] === "string" && renames[n] ? renames[n] : n; });
+    var seen = Object.create(null); return out.filter(function (n) { if (seen[n]) return false; seen[n] = 1; return true; });
   }
+
+  // Built-in + automatically synced categories, before the admin's own edits.
+  C.allCategories = function (base, mods) {
+    var out = {}; if (!base) return out;
+    Object.keys(base.categories || {}).forEach(function (k) { out[k] = { name: base.categories[k].name, cars: strList(base.categories[k].cars), synced: false }; });
+    var sc = mods && mods.synced && mods.synced.categories;
+    if (sc && typeof sc === "object") Object.keys(sc).forEach(function (k) { if (!out[k] && sc[k] && typeof sc[k].name === "string" && sc[k].name) out[k] = { name: sc[k].name, cars: strList(sc[k].cars), synced: true }; });
+    return out;
+  };
 
   // base: GAMES[gameKey]; mods: customMods[gameKey]
   C.effective = function (base, mods) {
     if (!base) return null; mods = mods || {};
-    var syn = mods.synced || {}, edits = mods.builtinCatEdits || {};
-    var baseCats = {};
-    Object.keys(base.categories).forEach(function (k) { baseCats[k] = { name: base.categories[k].name, cars: base.categories[k].cars.slice() }; });
-    Object.keys(syn.categories || {}).forEach(function (k) { if (!baseCats[k]) baseCats[k] = { name: syn.categories[k].name, cars: (syn.categories[k].cars || []).slice() }; });
-    var categories = {};
-    Object.keys(baseCats).forEach(function (k) {
+    var syn = mods.synced || {}, edits = (mods.builtinCatEdits && typeof mods.builtinCatEdits === "object") ? mods.builtinCatEdits : {};
+    var cats = C.allCategories(base, mods), categories = {};
+    Object.keys(cats).forEach(function (k) {
       var e = edits[k] || {};
       if (e.deleted) return;
-      var cars = (e.cars != null) ? e.cars.slice() : baseCats[k].cars.slice();           // legacy snapshot wins as the base list
-      cars = applyList(cars, (syn.cars && syn.cars[k] || []).concat(e.carAdds || []), e.carRemoves, e.carRenames);
-      categories[k] = { name: (e.name != null) ? e.name : baseCats[k].name, cars: cars };
+      var cars = Array.isArray(e.cars) ? strList(e.cars) : cats[k].cars.slice();          // legacy snapshot wins as the base list
+      cars = applyList(cars, strList(syn.cars && syn.cars[k]).concat(strList(e.carAdds)), e.carRemoves, e.carRenames);
+      categories[k] = { name: (typeof e.name === "string" && e.name) ? e.name : cats[k].name, cars: cars, synced: cats[k].synced };
     });
-    var tracks = (mods.builtinTrackEdits != null) ? mods.builtinTrackEdits.slice() : base.tracks.slice();
-    tracks = applyList(tracks, (syn.tracks || []).concat(mods.trackAdds || []), mods.trackRemoves, mods.trackRenames);
+    var tracks = Array.isArray(mods.builtinTrackEdits) ? strList(mods.builtinTrackEdits) : strList(base.tracks);
+    tracks = applyList(tracks, strList(syn.tracks).concat(strList(mods.trackAdds)), mods.trackRemoves, mods.trackRenames);
     return { name: base.name, short: base.short, tracks: tracks, categories: categories };
   };
 
@@ -523,78 +532,122 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
   C.legacyGap = function (base, mods) {
     mods = mods || {}; var gap = { tracks: [], cars: {}, total: 0 };
     if (!base) return gap;
-    if (mods.builtinTrackEdits != null) {
+    if (Array.isArray(mods.builtinTrackEdits)) {
       gap.tracks = base.tracks.filter(function (t) { return mods.builtinTrackEdits.indexOf(t) < 0; });
     }
-    var edits = mods.builtinCatEdits || {};
+    var edits = (mods.builtinCatEdits && typeof mods.builtinCatEdits === "object") ? mods.builtinCatEdits : {};
     Object.keys(edits).forEach(function (k) {
-      var e = edits[k]; if (!e || e.deleted || e.cars == null || !base.categories[k]) return;
+      var e = edits[k]; if (!e || e.deleted || !Array.isArray(e.cars) || !base.categories[k]) return;
       var miss = base.categories[k].cars.filter(function (c) { return e.cars.indexOf(c) < 0; });
       if (miss.length) gap.cars[k] = miss;
     });
     gap.total = gap.tracks.length + Object.keys(gap.cars).reduce(function (n, k) { return n + gap.cars[k].length; }, 0);
     return gap;
   };
-  // Convert snapshots to diff form, adding back everything the snapshot was missing.
-  C.mergeLegacy = function (base, mods) {
+  // Convert snapshots to diff form. Everything the snapshot was missing comes back, except the items
+  // opts.hide(kind, catKey, name) says to keep hidden (those become explicit removals).
+  C.mergeLegacy = function (base, mods, opts) {
+    var hide = (opts && typeof opts.hide === "function") ? opts.hide : function () { return false; };
     var m = clone(mods) || {};
-    if (m.builtinTrackEdits != null) {
-      var snap = m.builtinTrackEdits;
+    if (Array.isArray(m.builtinTrackEdits)) {
+      var snap = strList(m.builtinTrackEdits);
       m.trackAdds = applyList(m.trackAdds || [], snap.filter(function (t) { return base.tracks.indexOf(t) < 0; }));
+      var hiddenTracks = base.tracks.filter(function (t) { return snap.indexOf(t) < 0 && hide("track", "", t); });
+      if (hiddenTracks.length) m.trackRemoves = applyList(m.trackRemoves || [], hiddenTracks);
       delete m.builtinTrackEdits;
     }
-    var edits = m.builtinCatEdits || {};
+    var edits = (m.builtinCatEdits && typeof m.builtinCatEdits === "object") ? m.builtinCatEdits : {};
     Object.keys(edits).forEach(function (k) {
-      var e = edits[k]; if (!e || e.deleted || e.cars == null) return;
-      var bc = base.categories[k] ? base.categories[k].cars : [];
-      e.carAdds = applyList(e.carAdds || [], e.cars.filter(function (c) { return bc.indexOf(c) < 0; }));
+      var e = edits[k]; if (!e || e.deleted || !Array.isArray(e.cars)) return;
+      var own = strList(e.cars), bc = base.categories[k] ? base.categories[k].cars : [];
+      e.carAdds = applyList(e.carAdds || [], own.filter(function (c) { return bc.indexOf(c) < 0; }));
+      var hiddenCars = bc.filter(function (c) { return own.indexOf(c) < 0 && hide("car", k, c); });
+      if (hiddenCars.length) e.carRemoves = applyList(e.carRemoves || [], hiddenCars);
       delete e.cars;
     });
     return m;
   };
 
+  // Names the admin removed on purpose (tracks, cars, whole categories): the research must not suggest them again.
+  C.ignoreList = function (mods, base) {
+    var out = strList(mods && mods.trackRemoves), ed = (mods && mods.builtinCatEdits) || {}, all = C.allCategories(base, mods);
+    Object.keys(ed).forEach(function (k) {
+      if (!ed[k]) return;
+      out = out.concat(strList(ed[k].carRemoves));
+      if (ed[k].deleted && all[k]) out.push(all[k].name);
+    });
+    return out;
+  };
+
   // ── diff-based admin edits (pure: return new mods for the game) ──
   function ensure(mods) { var m = clone(mods) || {}; if (!m.tracks) m.tracks = []; if (!m.categories) m.categories = {}; if (!m.customCategories) m.customCategories = {}; return m; }
-  function catEntry(m, k) { if (!m.builtinCatEdits) m.builtinCatEdits = {}; if (!m.builtinCatEdits[k]) m.builtinCatEdits[k] = { name: null }; return m.builtinCatEdits[k]; }
+  function catEntry(m, k) { if (!m.builtinCatEdits || typeof m.builtinCatEdits !== "object") m.builtinCatEdits = {}; if (!m.builtinCatEdits[k]) m.builtinCatEdits[k] = { name: null }; return m.builtinCatEdits[k]; }
+  // The name an item has in the underlying list when it is shown as `shown` (renames are stored old → new).
+  function originOf(renames, shown) {
+    if (renames && typeof renames === "object") { var ks = Object.keys(renames); for (var i = 0; i < ks.length; i++) if (renames[ks[i]] === shown) return ks[i]; }
+    return shown;
+  }
+  function setRename(holder, field, origin, newName) {
+    if (!holder[field] || typeof holder[field] !== "object") holder[field] = {};
+    if (newName === origin) delete holder[field][origin]; else holder[field][origin] = newName;
+    if (!Object.keys(holder[field]).length) delete holder[field];
+  }
+
+  C.renameCategory = function (mods, k, name) { var m = ensure(mods); name = String(name || "").trim(); if (!name) return m; catEntry(m, k).name = name; return m; };
+  C.deleteCategory = function (mods, k) { var m = ensure(mods); catEntry(m, k).deleted = true; return m; };
+  C.restoreCategory = function (mods, k) {
+    var m = ensure(mods), e = m.builtinCatEdits && m.builtinCatEdits[k];
+    if (e) { delete e.deleted; if (Object.keys(e).every(function (f) { return e[f] == null || (typeof e[f] === "object" && !Object.keys(e[f]).length); })) delete m.builtinCatEdits[k]; }
+    return m;
+  };
+
   C.addBuiltinCar = function (mods, k, name) {
     var m = ensure(mods), e = catEntry(m, k); name = String(name || "").trim(); if (!name) return m;
-    if (e.cars != null) addUnique(e.cars, name); else { e.carAdds = e.carAdds || []; addUnique(e.carAdds, name); if (e.carRemoves) e.carRemoves = e.carRemoves.filter(function (x) { return x !== name; }); }
+    if (Array.isArray(e.cars)) addUnique(e.cars, name);
+    else { e.carAdds = strList(e.carAdds); addUnique(e.carAdds, name); if (e.carRemoves) e.carRemoves = strList(e.carRemoves).filter(function (x) { return x !== name; }); }
     return m;
   };
-  C.removeBuiltinCar = function (mods, k, name) {
+  C.removeBuiltinCar = function (mods, k, shown) {
     var m = ensure(mods), e = catEntry(m, k);
-    if (e.cars != null) { e.cars = e.cars.filter(function (c) { return c !== name; }); return m; }
-    var wasAdded = (e.carAdds || []).indexOf(name) >= 0;
-    e.carAdds = (e.carAdds || []).filter(function (c) { return c !== name; });
-    if (m.synced && m.synced.cars && m.synced.cars[k]) m.synced.cars[k] = m.synced.cars[k].filter(function (c) { return c !== name; });
-    if (!wasAdded) { e.carRemoves = e.carRemoves || []; addUnique(e.carRemoves, name); }
+    if (Array.isArray(e.cars)) { e.cars = e.cars.filter(function (c) { return c !== shown; }); return m; }
+    var origin = originOf(e.carRenames, shown);
+    if (origin !== shown) setRename(e, "carRenames", origin, origin);
+    var wasAdded = strList(e.carAdds).indexOf(origin) >= 0;
+    e.carAdds = strList(e.carAdds).filter(function (c) { return c !== origin; });
+    if (m.synced && m.synced.cars && m.synced.cars[k]) m.synced.cars[k] = strList(m.synced.cars[k]).filter(function (c) { return c !== origin; });
+    if (!wasAdded) { e.carRemoves = strList(e.carRemoves); addUnique(e.carRemoves, origin); }
     return m;
   };
-  C.renameBuiltinCar = function (mods, k, oldName, newName) {
+  C.renameBuiltinCar = function (mods, k, shown, newName) {
     var m = ensure(mods), e = catEntry(m, k); newName = String(newName || "").trim(); if (!newName) return m;
-    if (e.cars != null) { e.cars = e.cars.map(function (c) { return c === oldName ? newName : c; }); return m; }
-    if ((e.carAdds || []).indexOf(oldName) >= 0) { e.carAdds = e.carAdds.map(function (c) { return c === oldName ? newName : c; }); return m; }
-    e.carRenames = e.carRenames || {}; e.carRenames[oldName] = newName; return m;
+    if (Array.isArray(e.cars)) { e.cars = e.cars.map(function (c) { return c === shown ? newName : c; }); return m; }
+    if (strList(e.carAdds).indexOf(shown) >= 0) { e.carAdds = strList(e.carAdds).map(function (c) { return c === shown ? newName : c; }); return m; }
+    setRename(e, "carRenames", originOf(e.carRenames, shown), newName);
+    return m;
   };
   C.addBuiltinTrack = function (mods, name) {
     var m = ensure(mods); name = String(name || "").trim(); if (!name) return m;
-    if (m.builtinTrackEdits != null) addUnique(m.builtinTrackEdits, name); else { m.trackAdds = m.trackAdds || []; addUnique(m.trackAdds, name); if (m.trackRemoves) m.trackRemoves = m.trackRemoves.filter(function (x) { return x !== name; }); }
+    if (Array.isArray(m.builtinTrackEdits)) addUnique(m.builtinTrackEdits, name);
+    else { m.trackAdds = strList(m.trackAdds); addUnique(m.trackAdds, name); if (m.trackRemoves) m.trackRemoves = strList(m.trackRemoves).filter(function (x) { return x !== name; }); }
     return m;
   };
-  C.removeBuiltinTrack = function (mods, name) {
+  C.removeBuiltinTrack = function (mods, shown) {
     var m = ensure(mods);
-    if (m.builtinTrackEdits != null) { m.builtinTrackEdits = m.builtinTrackEdits.filter(function (t) { return t !== name; }); return m; }
-    var wasAdded = (m.trackAdds || []).indexOf(name) >= 0;
-    m.trackAdds = (m.trackAdds || []).filter(function (t) { return t !== name; });
-    if (m.synced && m.synced.tracks) m.synced.tracks = m.synced.tracks.filter(function (t) { return t !== name; });
-    if (!wasAdded) { m.trackRemoves = m.trackRemoves || []; addUnique(m.trackRemoves, name); }
+    if (Array.isArray(m.builtinTrackEdits)) { m.builtinTrackEdits = m.builtinTrackEdits.filter(function (t) { return t !== shown; }); return m; }
+    var origin = originOf(m.trackRenames, shown);
+    if (origin !== shown) setRename(m, "trackRenames", origin, origin);
+    var wasAdded = strList(m.trackAdds).indexOf(origin) >= 0;
+    m.trackAdds = strList(m.trackAdds).filter(function (t) { return t !== origin; });
+    if (m.synced && m.synced.tracks) m.synced.tracks = strList(m.synced.tracks).filter(function (t) { return t !== origin; });
+    if (!wasAdded) { m.trackRemoves = strList(m.trackRemoves); addUnique(m.trackRemoves, origin); }
     return m;
   };
-  C.renameBuiltinTrack = function (mods, oldName, newName) {
+  C.renameBuiltinTrack = function (mods, shown, newName) {
     var m = ensure(mods); newName = String(newName || "").trim(); if (!newName) return m;
-    if (m.builtinTrackEdits != null) { m.builtinTrackEdits = m.builtinTrackEdits.map(function (t) { return t === oldName ? newName : t; }); return m; }
-    if ((m.trackAdds || []).indexOf(oldName) >= 0) { m.trackAdds = m.trackAdds.map(function (t) { return t === oldName ? newName : t; }); return m; }
-    m.trackRenames = m.trackRenames || {}; m.trackRenames[oldName] = newName; return m;
+    if (Array.isArray(m.builtinTrackEdits)) { m.builtinTrackEdits = m.builtinTrackEdits.map(function (t) { return t === shown ? newName : t; }); return m; }
+    if (strList(m.trackAdds).indexOf(shown) >= 0) { m.trackAdds = strList(m.trackAdds).map(function (t) { return t === shown ? newName : t; }); return m; }
+    setRename(m, "trackRenames", originOf(m.trackRenames, shown), newName);
+    return m;
   };
 
   // ═════════════════════════ catalog research (web search) ═════════════════════════
@@ -615,34 +668,57 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
   S.buildRequest = function (gameName, eff, model) {
     var cats = Object.keys(eff.categories).map(function (k) { return "- " + eff.categories[k].name + ": " + eff.categories[k].cars.join("; "); }).join("\n");
     var user = "GAME: " + gameName + "\n\nCURRENT CATALOG\nTRACKS:\n" + eff.tracks.join("; ") + "\n\nCATEGORIES AND CARS:\n" + cats + "\n\nResearch the current content now and return the JSON report.";
-    return { model: model || "claude-sonnet-5", max_tokens: 6000, system: RESEARCH_SYSTEM, tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }], messages: [{ role: "user", content: user }] };
+    return { model: model || "claude-sonnet-5", max_tokens: 8000, system: RESEARCH_SYSTEM, tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }], messages: [{ role: "user", content: user }] };
   };
   // Last text block(s) of a (possibly tool-using) response.
   S.textOf = function (content) {
     return (content || []).filter(function (b) { return b && b.type === "text"; }).map(function (b) { return b.text; }).join("\n");
   };
+  // Run the request through `call` (payload → Promise<response>), resuming paused server-tool turns.
+  // Resolves { json, text, turns } or rejects with a message that can be shown to the admin.
+  S.run = function (call, req, opts) {
+    var maxTurns = (opts && opts.maxTurns) || 5, messages = req.messages.slice(), turns = 0;
+    function step() {
+      turns++;
+      return Promise.resolve(call(Object.assign({}, req, { messages: messages }))).then(function (d) {
+        var content = (d && d.content) || [];
+        if (d && d.stop_reason === "pause_turn") {
+          if (turns >= maxTurns) throw new Error("The web search is taking too long. Try again in a minute.");
+          messages = messages.concat([{ role: "assistant", content: content }]);
+          return step();
+        }
+        var text = S.textOf(content), json = parseJsonLoose(text);
+        if (!json) throw new Error(d && d.stop_reason === "max_tokens" ? "The answer was cut off. Try again." : "The research did not return a usable list. Try again.");
+        return { json: json, text: text, turns: turns };
+      });
+    }
+    return step();
+  };
   function cleanItem(s) { s = clip(String(s || "").replace(/<[^>]*>/g, "").replace(/[<>{}|`]/g, ""), 90); return /https?:|www\./i.test(s) ? "" : s; }
   function cleanUrl(u) { u = String(u || "").trim(); return /^https?:\/\/[^\s"'<>]{4,300}$/.test(u) ? u : ""; }
   function sameName(a, b) { var x = norm(a), y = norm(b); return x === y || (x && y && jaccard(a, b) >= 0.85); }
-  // research JSON → proposals not already in the effective catalog
-  S.diff = function (eff, research) {
+  // research JSON → proposals not already in the effective catalog (and not removed by the admin on purpose)
+  S.diff = function (eff, research, ignore) {
     var out = { tracks: [], cars: [], categories: [], suspect: [] };
     if (!research || typeof research !== "object") return out;
+    var skip = strList(ignore);
+    var ignored = function (name) { return skip.some(function (x) { return sameName(x, name); }); };
     var allCars = []; Object.keys(eff.categories).forEach(function (k) { eff.categories[k].cars.forEach(function (c) { allCars.push(c); }); });
     var catByName = function (name) { var hit = null; Object.keys(eff.categories).forEach(function (k) { if (!hit && (norm(eff.categories[k].name) === norm(name) || jaccard(eff.categories[k].name, name) >= 0.6)) hit = k; }); return hit; };
     (Array.isArray(research.tracks) ? research.tracks : []).slice(0, 60).forEach(function (t) {
       var name = cleanItem(t && t.name); if (!name) return;
-      if (eff.tracks.some(function (x) { return sameName(x, name); }) || out.tracks.some(function (x) { return sameName(x.name, name); })) return;
+      if (eff.tracks.some(function (x) { return sameName(x, name); }) || out.tracks.some(function (x) { return sameName(x.name, name); }) || ignored(name)) return;
       out.tracks.push({ id: uid("t"), name: name, source: cleanUrl(t.source), selected: true });
     });
     (Array.isArray(research.cars) ? research.cars : []).slice(0, 120).forEach(function (c) {
       var name = cleanItem(c && c.name), cat = cleanItem(c && c.category); if (!name) return;
-      if (allCars.some(function (x) { return sameName(x, name); }) || out.cars.some(function (x) { return sameName(x.name, name); })) return;
+      if (allCars.some(function (x) { return sameName(x, name); }) || out.cars.some(function (x) { return sameName(x.name, name); }) || ignored(name)) return;
       var key = catByName(cat);
+      if (!key && cat && ignored(cat)) return;                                   // its class was removed on purpose
       out.cars.push({ id: uid("c"), name: name, catKey: key, catName: key ? eff.categories[key].name : (cat || "New category"), source: cleanUrl(c.source), selected: true });
     });
     (Array.isArray(research.categories) ? research.categories : []).slice(0, 20).forEach(function (c) {
-      var name = cleanItem(c && c.name); if (!name || catByName(name)) return;
+      var name = cleanItem(c && c.name); if (!name || catByName(name) || ignored(name)) return;
       if (out.categories.some(function (x) { return sameName(x.name, name); })) return;
       out.categories.push({ id: uid("k"), name: name, source: cleanUrl(c.source), selected: true });
     });
@@ -652,26 +728,41 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
     });
     return out;
   };
+  function synKey(name) {
+    var k = "syn_" + norm(name).replace(/ /g, "_").slice(0, 40);
+    if (k === "syn_") { var h = 5381, s = String(name); for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; k += h.toString(36); }
+    return k;
+  }
+  function synced(m) {
+    var syn = m.synced = (m.synced && typeof m.synced === "object") ? m.synced : { v: 1, tracks: [], cars: {}, categories: {}, log: [] };
+    syn.tracks = strList(syn.tracks); syn.cars = (syn.cars && typeof syn.cars === "object") ? syn.cars : {}; syn.categories = (syn.categories && typeof syn.categories === "object") ? syn.categories : {}; syn.log = Array.isArray(syn.log) ? syn.log : [];
+    return syn;
+  }
   // Apply selected proposals as "synced" additions (no snapshots, never removes anything).
   S.apply = function (mods, proposals, sources) {
-    var m = ensure(mods); var syn = m.synced = m.synced || { v: 1, tracks: [], cars: {}, categories: {}, log: [] };
-    syn.tracks = syn.tracks || []; syn.cars = syn.cars || {}; syn.categories = syn.categories || {}; syn.log = syn.log || [];
+    var m = ensure(mods), syn = synced(m);
     var now = new Date().toISOString(), n = 0;
     (proposals.categories || []).forEach(function (c) {
       if (c.selected === false) return;
-      var key = "syn_" + norm(c.name).replace(/ /g, "_").slice(0, 40);
+      var key = synKey(c.name);
       if (!syn.categories[key]) { syn.categories[key] = { name: c.name, cars: [] }; syn.log.push({ ts: now, kind: "category", name: c.name, source: c.source }); n++; }
     });
     (proposals.tracks || []).forEach(function (t) { if (t.selected === false) return; if (syn.tracks.indexOf(t.name) < 0) { syn.tracks.push(t.name); syn.log.push({ ts: now, kind: "track", name: t.name, source: t.source }); n++; } });
     (proposals.cars || []).forEach(function (c) {
       if (c.selected === false) return;
       var key = c.catKey;
-      if (!key) { var nk = "syn_" + norm(c.catName).replace(/ /g, "_").slice(0, 40); if (!syn.categories[nk]) syn.categories[nk] = { name: c.catName, cars: [] }; key = nk; }
-      if (syn.categories[key]) { if (syn.categories[key].cars.indexOf(c.name) < 0) { syn.categories[key].cars.push(c.name); syn.log.push({ ts: now, kind: "car", name: c.name, source: c.source }); n++; } }
-      else { syn.cars[key] = syn.cars[key] || []; if (syn.cars[key].indexOf(c.name) < 0) { syn.cars[key].push(c.name); syn.log.push({ ts: now, kind: "car", name: c.name, source: c.source }); n++; } }
+      if (!key) { var nk = synKey(c.catName); if (!syn.categories[nk]) syn.categories[nk] = { name: c.catName, cars: [] }; key = nk; }
+      if (syn.categories[key]) { syn.categories[key].cars = strList(syn.categories[key].cars); if (syn.categories[key].cars.indexOf(c.name) < 0) { syn.categories[key].cars.push(c.name); syn.log.push({ ts: now, kind: "car", name: c.name, source: c.source }); n++; } }
+      else { syn.cars[key] = strList(syn.cars[key]); if (syn.cars[key].indexOf(c.name) < 0) { syn.cars[key].push(c.name); syn.log.push({ ts: now, kind: "car", name: c.name, source: c.source }); n++; } }
     });
-    syn.ts = now; syn.log = syn.log.slice(-200);
+    syn.ts = now; syn.checked = now; syn.log = syn.log.slice(-200);
     return { mods: m, applied: n };
+  };
+  S.markChecked = function (mods) { var m = ensure(mods); synced(m).checked = new Date().toISOString(); return m; };
+  // True when the catalog was never checked, or not within `days` (default 30).
+  S.stale = function (mods, days) {
+    var t = mods && mods.synced && mods.synced.checked ? Date.parse(mods.synced.checked) : 0;
+    return !t || (Date.now() - t) > (days || 30) * 86400000;
   };
 
   // ═════════════════════════ storage (cloud table with local fallback) ═════════════════════════
@@ -693,7 +784,11 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
     out.updated = [x.updated, y.updated].filter(Boolean).sort().pop() || null;
     return out;
   };
-  // Returns { mem, source: "cloud" | "local" }
+  function memSig(m) {
+    var x = M.sanitize(m);
+    return x.lessons.map(function (l) { return l.id + "|" + l.ts; }).concat(x.baselines.map(function (b) { return "b:" + b.id + "|" + b.ts; })).sort().join(",");
+  }
+  // Returns { mem, source: "cloud" | "local", needsPush } — needsPush: this device has lessons the cloud copy does not
   ST.loadMemory = function (sb, uid) {
     var local = lsGet("pw_memory_" + uid);
     if (!sb) return Promise.resolve({ mem: M.sanitize(local), source: "local" });
@@ -702,7 +797,8 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
       var cloud = res.data && res.data[0] ? res.data[0].data : null;
       var merged = ST.mergeMemory(cloud, local);
       lsSet("pw_memory_" + uid, merged);
-      return { mem: merged, source: "cloud" };
+      var hasContent = merged.lessons.length + merged.baselines.length > 0;
+      return { mem: merged, source: "cloud", needsPush: hasContent && memSig(cloud) !== memSig(merged) };
     }, function (e) { return { mem: M.sanitize(local), source: "local", error: e }; });
   };
   ST.saveMemory = function (sb, uid, mem, cloudOk) {
@@ -718,10 +814,11 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
     if (!sb) return Promise.resolve({ profiles: local, source: "local" });
     return Promise.resolve(sb.from("car_profiles").select("id,profile,updated_at")).then(function (res) {
       if (res.error) return { profiles: local, source: "local", error: res.error, missing: ST.tableMissing(res.error) };
-      var merged = Object.assign({}, local);
-      (res.data || []).forEach(function (r) { if (r && r.id && r.profile) merged[r.id] = r.profile; });
+      var merged = Object.assign({}, local), inCloud = {};
+      (res.data || []).forEach(function (r) { if (r && r.id && r.profile) { merged[r.id] = r.profile; inCloud[r.id] = 1; } });
       lsSet("pw_profiles", merged);
-      return { profiles: merged, source: "cloud" };
+      // profiles that exist only on this device (made before the cloud table existed) — the app uploads them
+      return { profiles: merged, source: "cloud", localOnly: Object.keys(local).filter(function (k) { return !inCloud[k] && local[k]; }) };
     }, function (e) { return { profiles: local, source: "local", error: e }; });
   };
   ST.saveProfile = function (sb, uid, profile, cloudOk) {
@@ -820,6 +917,90 @@ window.storage = storage;
 // Models used by the app — one place to change them.
 var PW_MODELS = { build: "claude-sonnet-5", adjust: "claude-haiku-4-5", extract: "claude-haiku-4-5", vision: "claude-sonnet-5", research: "claude-sonnet-5" };
 
+// One-time Supabase setup for the engineer's memory and the shared car profiles (identical to supabase/engineer-memory.sql).
+var PW_CLOUD_SQL = `-- PIT WALL — cloud storage for the engineer's memory and the shared car profiles.
+-- Run once in Supabase → SQL Editor → New query → paste → Run. Safe to run again.
+
+-- 1) Who may use shared data: the admin, or any user whose registration was approved.
+create or replace function public.pw_is_approved()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((auth.jwt() ->> 'email') = 'bmansano@gmail.com', false)
+      or exists (
+        select 1 from public.user_approvals a
+        where a.user_id = auth.uid() and a.status = 'approved'
+      );
+$$;
+revoke all on function public.pw_is_approved() from public, anon;
+grant execute on function public.pw_is_approved() to authenticated;
+
+-- 2) Engineer memory: one private row per user (lessons + rated reference setups).
+create table if not exists public.engineer_memory (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  data       jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.engineer_memory enable row level security;
+grant select, insert, update, delete on public.engineer_memory to authenticated;
+
+drop policy if exists "engineer_memory_select_own" on public.engineer_memory;
+drop policy if exists "engineer_memory_insert_own" on public.engineer_memory;
+drop policy if exists "engineer_memory_update_own" on public.engineer_memory;
+drop policy if exists "engineer_memory_delete_own" on public.engineer_memory;
+create policy "engineer_memory_select_own" on public.engineer_memory
+  for select to authenticated using (auth.uid() = user_id);
+create policy "engineer_memory_insert_own" on public.engineer_memory
+  for insert to authenticated with check (auth.uid() = user_id);
+create policy "engineer_memory_update_own" on public.engineer_memory
+  for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "engineer_memory_delete_own" on public.engineer_memory
+  for delete to authenticated using (auth.uid() = user_id);
+
+-- 3) Car parameter profiles (read from the game's setup screens): shared by all approved users.
+create table if not exists public.car_profiles (
+  id         text primary key,
+  game       text not null,
+  car        text not null,
+  profile    jsonb not null,
+  created_by uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+alter table public.car_profiles enable row level security;
+grant select, insert, update, delete on public.car_profiles to authenticated;
+
+drop policy if exists "car_profiles_select_approved" on public.car_profiles;
+drop policy if exists "car_profiles_insert_approved" on public.car_profiles;
+drop policy if exists "car_profiles_update_approved" on public.car_profiles;
+drop policy if exists "car_profiles_delete_owner_admin" on public.car_profiles;
+create policy "car_profiles_select_approved" on public.car_profiles
+  for select to authenticated using (public.pw_is_approved());
+create policy "car_profiles_insert_approved" on public.car_profiles
+  for insert to authenticated with check (public.pw_is_approved() and auth.uid() = created_by);
+create policy "car_profiles_update_approved" on public.car_profiles
+  for update to authenticated using (public.pw_is_approved()) with check (public.pw_is_approved() and auth.uid() = created_by);
+create policy "car_profiles_delete_owner_admin" on public.car_profiles
+  for delete to authenticated using (auth.uid() = created_by or (auth.jwt() ->> 'email') = 'bmansano@gmail.com');
+`;
+
+function copyToClipboard(text) {
+  function fallback() {
+    try {
+      var ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); var ok = document.execCommand("copy"); document.body.removeChild(ta); return ok;
+    } catch (e) { return false; }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function() { return true; }, function() { return fallback(); });
+  return Promise.resolve(fallback());
+}
+
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch (e) { return ""; }
+}
+
 // Read a screenshot, downscale it (max 1600 px) and return base64 JPEG + a preview URL.
 function fileToJpeg(file) {
   return new Promise(function(resolve, reject) {
@@ -850,8 +1031,10 @@ async function callClaude(payload) {
   var headers = { "Content-Type": "application/json", "apikey": window.SB_KEY };
   if (token) headers["Authorization"] = "Bearer " + token;
   var res = await fetch(window.SB_URL + "/functions/v1/anthropic-proxy", { method: "POST", headers: headers, body: JSON.stringify(payload) });
-  var d = await res.json();
+  var d = null;
+  try { d = await res.json(); } catch (e) { throw new Error("The engineer service did not answer correctly (HTTP " + res.status + "). Try again in a moment."); }
   if (d && d.error) throw new Error(typeof d.error === "object" ? (d.error.message || JSON.stringify(d.error)) : String(d.error));
+  if (!res.ok) throw new Error("The engineer service returned HTTP " + res.status + ".");
   return d;
 }
 
@@ -1673,6 +1856,11 @@ function ModBadge() {
   return <span style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: MOD_BG, border: "1px solid " + MOD_BD, borderRadius: 2, color: MOD_PURPLE, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>MOD</span>;
 }
 
+// Marks catalog entries that were added by the web check (not shipped with the app).
+function AutoBadge() {
+  return <span title="Added by the catalog check" style={{ fontSize: 9, letterSpacing: 1, padding: "1px 5px", background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.4)", borderRadius: 2, color: "#38bdf8", fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>AUTO</span>;
+}
+
 function EditInline(props) {
   var editKey = props.type + ":" + props.id;
   var editing = props.adminEditing === editKey;
@@ -2345,6 +2533,11 @@ function App() {
   var _adminCat = useState(""); var adminCat = _adminCat[0]; var setAdminCat = _adminCat[1];
   var _adminInputs = useState({}); var adminInputs = _adminInputs[0]; var setAdminInputs = _adminInputs[1];
   var _adminEditing = useState(null); var adminEditing = _adminEditing[0]; var setAdminEditing = _adminEditing[1];
+  // Catalog check results per simulator, "frozen list" selections, cloud re-check
+  var _catRun = useState({}); var catRun = _catRun[0]; var setCatRun = _catRun[1];
+  var _legacyOff = useState({}); var legacyOff = _legacyOff[0]; var setLegacyOff = _legacyOff[1];
+  var _cloudBusy = useState(false); var cloudBusy = _cloudBusy[0]; var setCloudBusy = _cloudBusy[1];
+  var customModsRef = useRef(customMods); customModsRef.current = customMods;
   // Telemetry
   var _telem = useState(null); var telemetry = _telem[0]; var setTelemetry = _telem[1];
   var _telemParsing = useState(false); var telemParsing = _telemParsing[0]; var setTelemParsing = _telemParsing[1];
@@ -2427,24 +2620,42 @@ function App() {
     var allTracks = g.tracks.concat((customMods[game] && customMods[game].tracks) || []);
     if (track && allTracks.indexOf(track) < 0) { setTrack(""); setCfgStep(function(x) { return Math.min(x, 2); }); }
   }, [modsLoaded, customMods, game, category]);
-  // Load the engineer's memory and the shared car profiles (cloud table if it exists, otherwise this device)
-  useEffect(function() {
-    if (!user) return;
-    var alive = true;
-    PW.store.loadMemory(window.sb, user.id).then(function(r) {
-      if (!alive) return;
+  // Load the engineer's memory and the shared car profiles (cloud table if it exists, otherwise this device).
+  // Whatever this device holds that the cloud copy lacks (made before the tables existed) is uploaded.
+  function loadCloudData(isCurrent) {
+    var uid = user.id;
+    var pm = PW.store.loadMemory(window.sb, uid).then(function(r) {
+      if (!isCurrent()) return;
       if (r.missing) cloudOkRef.current.memory = false;
-      memoryRef.current = r.mem; setMemory(r.mem);
+      var merged = PW.store.mergeMemory(memoryRef.current, r.mem);
+      memoryRef.current = merged; setMemory(merged);
       setCloud(function(c) { return Object.assign({}, c, { memory: r.source, memoryMissing: !!r.missing }); });
+      if (r.needsPush) return PW.store.saveMemory(window.sb, uid, merged, cloudOkRef.current.memory);
     });
-    PW.store.loadProfiles(window.sb).then(function(r) {
-      if (!alive) return;
+    var pp = PW.store.loadProfiles(window.sb).then(function(r) {
+      if (!isCurrent()) return;
       if (r.missing) cloudOkRef.current.profiles = false;
       setProfiles(r.profiles);
       setCloud(function(c) { return Object.assign({}, c, { profiles: r.source, profilesMissing: !!r.missing }); });
+      if (r.source === "cloud" && r.localOnly && r.localOnly.length) {
+        return Promise.all(r.localOnly.map(function(k) { return PW.store.saveProfile(window.sb, uid, r.profiles[k], cloudOkRef.current.profiles); }));
+      }
     });
+    return Promise.all([pm, pp]);
+  }
+  useEffect(function() {
+    if (!user) return;
+    var alive = true;
+    loadCloudData(function() { return alive; });
     return function() { alive = false; };
   }, [user ? user.id : null]);
+  function recheckCloud() {
+    if (!user) return;
+    var uid = user.id;
+    cloudOkRef.current = { memory: true, profiles: true };
+    setCloudBusy(true);
+    loadCloudData(function() { return !!user && user.id === uid; }).then(function() { setCloudBusy(false); }, function() { setCloudBusy(false); });
+  }
   useEffect(function() { if (step === "config" && user) loadMods(); }, [step]);
   useEffect(function() {
     var justFinishedLoading = prevLoadingRef.current && !loading;
@@ -2737,10 +2948,11 @@ function App() {
   }
 
   function saveCustomMods(mods) {
+    customModsRef.current = mods;
     setCustomMods(mods);
     if (!window.sb) return;
     window.sb.from("setups").upsert({ id: "__mods__", user_id: user ? user.id : null, ts: new Date().toISOString(), data: mods }, { onConflict: "id" })
-      .then(function(res) { if (res.error) console.error("saveCustomMods:", res.error.message); });
+      .then(function(res) { if (res.error) { console.error("saveCustomMods:", res.error.message); setToast("Could not save to the cloud: " + res.error.message); } });
   }
 
   // ── APPROVAL FUNCTIONS ───────────────────────────────────────────────────────
@@ -2785,114 +2997,128 @@ function App() {
       .then(function(res) { if (!res.error) loadApprovalUsers(); });
   }
 
-  // ── EFFECTIVE GAME DATA — merges GAMES constant with admin edits ─────────────
+  // ── EFFECTIVE GAME DATA — built-in catalog + automatic additions + the admin's own edits (see PW.catalog) ──
   function getEffectiveGame(gameKey) {
-    var base = GAMES[gameKey];
-    if (!base) return null;
-    var mods = customMods[gameKey] || {};
-    var catEdits = mods.builtinCatEdits || {};
-    var categories = {};
-    Object.keys(base.categories).forEach(function(k) {
-      var cat = base.categories[k];
-      var edit = catEdits[k];
-      if (edit && edit.deleted) return;
-      categories[k] = {
-        name: (edit && edit.name != null) ? edit.name : cat.name,
-        cars: (edit && edit.cars != null) ? edit.cars : cat.cars.slice()
-      };
-    });
-    return {
-      name: base.name, short: base.short,
-      tracks: (mods.builtinTrackEdits != null) ? mods.builtinTrackEdits : base.tracks,
-      categories: categories
-    };
+    return PW.catalog.effective(GAMES[gameKey], customMods[gameKey]);
   }
 
   // ── BUILT-IN EDIT HELPERS ────────────────────────────────────────────────────
-  function getBuiltinCatEntry(n, gameKey, catKey) {
-    if (!n[gameKey].builtinCatEdits) n[gameKey].builtinCatEdits = {};
-    if (!n[gameKey].builtinCatEdits[catKey]) {
-      var base = GAMES[gameKey]; var baseCat = base && base.categories[catKey];
-      n[gameKey].builtinCatEdits[catKey] = { name: null, cars: baseCat ? baseCat.cars.slice() : [] };
-    }
-    return n[gameKey].builtinCatEdits[catKey];
+  // Only the admin's changes are stored (adds / removes / renames), never a copy of the whole list,
+  // so catalog updates and the web check keep flowing through.
+  function editGameMods(gameKey, fn) {
+    var n = getModBase(customModsRef.current, gameKey);
+    n[gameKey] = fn(n[gameKey]);
+    saveCustomMods(n);
   }
 
   function renameBuiltinCat(gameKey, catKey, newName) {
     var name = newName.trim(); if (!name) return;
-    var n = getModBase(customMods, gameKey);
-    getBuiltinCatEntry(n, gameKey, catKey).name = name;
-    saveCustomMods(n); setAdminEditing(null);
+    editGameMods(gameKey, function(m) { return PW.catalog.renameCategory(m, catKey, name); }); setAdminEditing(null);
   }
 
   function deleteBuiltinCat(gameKey, catKey, catName) {
     if (!confirm("Remove the category \"" + catName + "\" from the list?")) return;
-    var n = getModBase(customMods, gameKey);
-    if (!n[gameKey].builtinCatEdits) n[gameKey].builtinCatEdits = {};
-    n[gameKey].builtinCatEdits[catKey] = { deleted: true };
-    saveCustomMods(n); if (adminCat === catKey) setAdminCat("");
+    editGameMods(gameKey, function(m) { return PW.catalog.deleteCategory(m, catKey); }); if (adminCat === catKey) setAdminCat("");
   }
 
   function restoreBuiltinCat(gameKey, catKey) {
-    var n = getModBase(customMods, gameKey);
-    if (n[gameKey].builtinCatEdits && n[gameKey].builtinCatEdits[catKey]) {
-      delete n[gameKey].builtinCatEdits[catKey];
-    }
-    saveCustomMods(n);
+    editGameMods(gameKey, function(m) { return PW.catalog.restoreCategory(m, catKey); });
   }
 
   function addBuiltinCar(gameKey, catKey, carName) {
     var name = carName.trim(); if (!name || !gameKey || !catKey) return;
-    var n = getModBase(customMods, gameKey);
-    var entry = getBuiltinCatEntry(n, gameKey, catKey);
-    if (!entry.cars.includes(name)) { entry.cars.push(name); entry.cars.sort(function(a,b){return a.localeCompare(b);}); }
-    saveCustomMods(n); setAdminInputs(function(p){return Object.assign({},p,{newBuiltinCar:""});});
+    editGameMods(gameKey, function(m) { return PW.catalog.addBuiltinCar(m, catKey, name); }); setAdminInputs(function(p){return Object.assign({},p,{newBuiltinCar:""});});
   }
 
   function removeBuiltinCar(gameKey, catKey, carName) {
-    var n = getModBase(customMods, gameKey);
-    var entry = getBuiltinCatEntry(n, gameKey, catKey);
-    entry.cars = entry.cars.filter(function(c){return c !== carName;});
-    saveCustomMods(n);
+    editGameMods(gameKey, function(m) { return PW.catalog.removeBuiltinCar(m, catKey, carName); });
   }
 
   function renameBuiltinCar(gameKey, catKey, oldName, newName) {
     var name = newName.trim(); if (!name) return;
-    var n = getModBase(customMods, gameKey);
-    var entry = getBuiltinCatEntry(n, gameKey, catKey);
-    entry.cars = entry.cars.map(function(c){return c === oldName ? name : c;});
-    entry.cars.sort(function(a,b){return a.localeCompare(b);});
-    saveCustomMods(n); setAdminEditing(null);
-  }
-
-  function initBuiltinTracks(n, gameKey) {
-    if (n[gameKey].builtinTrackEdits == null) {
-      n[gameKey].builtinTrackEdits = GAMES[gameKey] ? GAMES[gameKey].tracks.slice() : [];
-    }
+    editGameMods(gameKey, function(m) { return PW.catalog.renameBuiltinCar(m, catKey, oldName, name); }); setAdminEditing(null);
   }
 
   function addBuiltinTrack(gameKey, trackName) {
     var name = trackName.trim(); if (!name || !gameKey) return;
-    var n = getModBase(customMods, gameKey); initBuiltinTracks(n, gameKey);
-    if (!n[gameKey].builtinTrackEdits.includes(name)) {
-      n[gameKey].builtinTrackEdits.push(name);
-      n[gameKey].builtinTrackEdits.sort(function(a,b){return a.localeCompare(b);});
-    }
-    saveCustomMods(n); setAdminInputs(function(p){return Object.assign({},p,{newBuiltinTrack:""});});
+    editGameMods(gameKey, function(m) { return PW.catalog.addBuiltinTrack(m, name); }); setAdminInputs(function(p){return Object.assign({},p,{newBuiltinTrack:""});});
   }
 
   function removeBuiltinTrack(gameKey, trackName) {
-    var n = getModBase(customMods, gameKey); initBuiltinTracks(n, gameKey);
-    n[gameKey].builtinTrackEdits = n[gameKey].builtinTrackEdits.filter(function(t){return t !== trackName;});
-    saveCustomMods(n);
+    editGameMods(gameKey, function(m) { return PW.catalog.removeBuiltinTrack(m, trackName); });
   }
 
   function renameBuiltinTrack(gameKey, oldName, newName) {
     var name = newName.trim(); if (!name) return;
-    var n = getModBase(customMods, gameKey); initBuiltinTracks(n, gameKey);
-    n[gameKey].builtinTrackEdits = n[gameKey].builtinTrackEdits.map(function(t){return t === oldName ? name : t;});
-    n[gameKey].builtinTrackEdits.sort(function(a,b){return a.localeCompare(b);});
-    saveCustomMods(n); setAdminEditing(null);
+    editGameMods(gameKey, function(m) { return PW.catalog.renameBuiltinTrack(m, oldName, name); }); setAdminEditing(null);
+  }
+
+  // ── CATALOG CHECK (admin): web research → review → add ───────────────────────────
+  function putCatRun(gameKey, v) { setCatRun(function(p) { var n = Object.assign({}, p); n[gameKey] = v; return n; }); }
+
+  function runCatalogCheck(gameKey) {
+    var eff = getEffectiveGame(gameKey); if (!eff) return;
+    putCatRun(gameKey, { status: "running" });
+    var req = PW.sync.buildRequest(eff.name, eff, PW_MODELS.research);
+    PW.sync.run(callClaude, req).then(function(r) {
+      var mods = customModsRef.current[gameKey];      // the lists may have changed while the search ran
+      var proposals = PW.sync.diff(PW.catalog.effective(GAMES[gameKey], mods), r.json, PW.catalog.ignoreList(mods, GAMES[gameKey]));
+      var n = getModBase(customModsRef.current, gameKey); n[gameKey] = PW.sync.markChecked(n[gameKey]); saveCustomMods(n);
+      putCatRun(gameKey, { status: "done", proposals: proposals, applied: 0 });
+    }).catch(function(e) { putCatRun(gameKey, { status: "error", error: String((e && e.message) || e) }); });
+  }
+
+  function updateProposals(gameKey, fn) {
+    setCatRun(function(p) {
+      var cur = p[gameKey]; if (!cur || !cur.proposals) return p;
+      var n = Object.assign({}, p); n[gameKey] = Object.assign({}, cur, { proposals: fn(cur.proposals) }); return n;
+    });
+  }
+  function toggleProposal(gameKey, kind, id, on) {
+    updateProposals(gameKey, function(pr) { var np = Object.assign({}, pr); np[kind] = pr[kind].map(function(x) { return x.id === id ? Object.assign({}, x, { selected: on }) : x; }); return np; });
+  }
+  function setAllProposals(gameKey, on) {
+    updateProposals(gameKey, function(pr) {
+      var np = Object.assign({}, pr);
+      ["tracks", "cars", "categories"].forEach(function(k) { np[k] = pr[k].map(function(x) { return Object.assign({}, x, { selected: on }); }); });
+      return np;
+    });
+  }
+  function discardProposals(gameKey) {
+    updateProposals(gameKey, function(pr) { return Object.assign({}, pr, { tracks: [], cars: [], categories: [] }); });
+  }
+  function applyCatalog(gameKey) {
+    var run = catRun[gameKey]; if (!run || !run.proposals) return;
+    var n = getModBase(customModsRef.current, gameKey);
+    var r = PW.sync.apply(n[gameKey], run.proposals);
+    n[gameKey] = r.mods;
+    saveCustomMods(n);
+    putCatRun(gameKey, { status: "done", proposals: Object.assign({}, run.proposals, { tracks: [], cars: [], categories: [] }), applied: r.applied });
+    setToast(r.applied ? "Added " + r.applied + (r.applied === 1 ? " item" : " items") : "Nothing new to add");
+  }
+  function suspectInList(gameKey, sp) {
+    var eff = getEffectiveGame(gameKey); if (!eff) return false;
+    if (sp.kind === "track") return eff.tracks.indexOf(sp.name) >= 0;
+    return Object.keys(eff.categories).some(function(k) { return eff.categories[k].cars.indexOf(sp.name) >= 0; });
+  }
+  function dropSuspect(gameKey, idx) {
+    updateProposals(gameKey, function(pr) { return Object.assign({}, pr, { suspect: pr.suspect.filter(function(x, i) { return i !== idx; }) }); });
+  }
+  function removeSuspect(gameKey, sp, idx) {
+    if (sp.kind === "track") removeBuiltinTrack(gameKey, sp.name);
+    else {
+      var eff = getEffectiveGame(gameKey);
+      Object.keys(eff.categories).forEach(function(k) { if (eff.categories[k].cars.indexOf(sp.name) >= 0) removeBuiltinCar(gameKey, k, sp.name); });
+    }
+    dropSuspect(gameKey, idx);
+  }
+
+  // Turn a legacy full-copy list into "only my changes", keeping the items the admin left unticked hidden
+  function convertLegacyList(gameKey) {
+    var n = getModBase(customModsRef.current, gameKey);
+    n[gameKey] = PW.catalog.mergeLegacy(GAMES[gameKey], n[gameKey], { hide: function(kind, catKey, name) { return !!legacyOff[gameKey + "|" + kind + "|" + catKey + "|" + name]; } });
+    saveCustomMods(n);
+    setToast("List converted — catalog updates now reach this simulator");
   }
 
   function getModBase(mods, gameKey) {
@@ -3052,7 +3278,10 @@ function App() {
     gKey = gKey || "";
     var catKey = sv.categoryKey;
     if (!catKey && sv.category && gKey && GAMES[gKey]) {
-      Object.keys(GAMES[gKey].categories || {}).forEach(function(k) { if (GAMES[gKey].categories[k].name === sv.category) catKey = k; });
+      var effG = getEffectiveGame(gKey);
+      [effG && effG.categories, GAMES[gKey].categories].forEach(function(cats) {
+        Object.keys(cats || {}).forEach(function(k) { if (!catKey && cats[k].name === sv.category) catKey = k; });
+      });
     }
     return { gKey: gKey, catKey: catKey || "" };
   }
@@ -3095,8 +3324,9 @@ function App() {
   var modCarsForCat = (customMods[game] && customMods[game].categories && customMods[game].categories[category]) ? customMods[game].categories[category] : [];
   var modTracksForGame = (customMods[game] && customMods[game].tracks) ? customMods[game].tracks : [];
   var customCategoriesForGame = (customMods[game] && customMods[game].customCategories) ? customMods[game].customCategories : {};
-  var allCars = (cc ? cc.cars : []).concat(modCarsForCat);
-  var trks = cg ? cg.tracks.concat(modTracksForGame).slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
+  var firstOnly = function(x, i, a) { return a.indexOf(x) === i; };     // a MOD entry that later became part of the catalog is listed once
+  var allCars = (cc ? cc.cars : []).concat(modCarsForCat).filter(firstOnly);
+  var trks = cg ? cg.tracks.concat(modTracksForGame).filter(firstOnly).sort(function(a, b) { return a.localeCompare(b); }) : [];
   var isAdmin = user && user.email === "bmansano@gmail.com";
   var fTrks = trks.filter(function(t) { return t.toLowerCase().includes(trackFilter.toLowerCase()); });
   var fCars = allCars.slice().sort(function(a, b) { return a.localeCompare(b); }).filter(function(c) { return c.toLowerCase().includes(carFilter.toLowerCase()); });
@@ -4585,7 +4815,8 @@ function App() {
     var kindMeta = { avoid: ["AVOID", C.danger], fix: ["FIX · WORKED", C.ok], preference: ["PREFERENCE", "#60a5fa"], unavailable: ["UNAVAILABLE", "#c084fc"], range: ["RANGE", "#38bdf8"], note: ["NOTE", C.tm] };
     var gameShort = function(k) { return k && GAMES[k] ? (GAMES[k].short || GAMES[k].name) : ""; };
     var scopeText = function(l) {
-      var catName = l.cat && GAMES[l.game] && GAMES[l.game].categories[l.cat] ? GAMES[l.game].categories[l.cat].name : l.cat;
+      var lg = l.game ? getEffectiveGame(l.game) : null;
+      var catName = l.cat && lg && lg.categories[l.cat] ? lg.categories[l.cat].name : ((l.game && customMods[l.game] && customMods[l.game].customCategories && customMods[l.game].customCategories[l.cat]) || l.cat);
       return [gameShort(l.game), catName, l.car, l.track].filter(Boolean).join(" › ") || "Everything I drive";
     };
     var lessonsShown = memory.lessons.filter(function(l) {
@@ -4773,18 +5004,38 @@ function App() {
     });
     allCatsForAdmin.sort(function(a, b) { return a.name.localeCompare(b.name); });
 
-    // Deleted built-in categories (have builtinCatEdits[k].deleted === true)
+    // Removed built-in / automatically added categories (can be restored)
     var agCatEdits = agMods.builtinCatEdits || {};
-    var deletedBuiltinCats = GAMES[adminGame] ? Object.entries(GAMES[adminGame].categories).filter(function(e) {
+    var deletedBuiltinCats = Object.entries(PW.catalog.allCategories(GAMES[adminGame], agMods)).filter(function(e) {
       return agCatEdits[e[0]] && agCatEdits[e[0]].deleted;
-    }) : [];
+    });
 
     // Cars for currently selected admin category
     var adminCatObj = allCatsForAdmin.find(function(c) { return c.key === adminCat; });
     var builtInCarsForAdminCat = (adminCatObj && adminCatObj.builtIn && ag) ? (ag.categories[adminCat] ? ag.categories[adminCat].cars.slice().sort() : []) : [];
     var modCarsForAdminCat = (agMods.categories && agMods.categories[adminCat]) ? agMods.categories[adminCat].slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
     // Effective built-in tracks (with edits applied)
-    var agBuiltinTracks = (agMods.builtinTrackEdits != null) ? agMods.builtinTrackEdits.slice().sort() : (GAMES[adminGame] ? GAMES[adminGame].tracks.slice().sort() : []);
+    var agBuiltinTracks = ag ? ag.tracks.slice().sort(function(a, b) { return a.localeCompare(b); }) : [];
+    // Automatic catalog check
+    var agSyn = agMods.synced || {};
+    var agRun = catRun[adminGame] || { status: "idle" };
+    var agStale = !!adminGame && PW.sync.stale(agMods, 30);
+    var agProp = agRun.status === "done" && agRun.proposals ? agRun.proposals : null;
+    var agPropCount = agProp ? agProp.tracks.length + agProp.cars.length + agProp.categories.length : 0;
+    var agPropPicked = agProp ? [].concat(agProp.tracks, agProp.cars, agProp.categories).filter(function(x) { return x.selected !== false; }).length : 0;
+    var isAutoCar = function(catKey, car) { return !!(ag && ag.categories[catKey] && ag.categories[catKey].synced) || (agSyn.cars && Array.isArray(agSyn.cars[catKey]) && agSyn.cars[catKey].indexOf(car) >= 0); };
+    var isAutoTrack = function(t) { return Array.isArray(agSyn.tracks) && agSyn.tracks.indexOf(t) >= 0; };
+    // Frozen copies of the list (made by the old editor) hide new built-in items
+    var agGap = PW.catalog.legacyGap(GAMES[adminGame], agMods);
+    var agGapItems = [];
+    agGap.tracks.forEach(function(t) { agGapItems.push({ key: adminGame + "|track||" + t, name: t, label: "Track" }); });
+    Object.keys(agGap.cars).forEach(function(k) {
+      agGap.cars[k].forEach(function(c) { agGapItems.push({ key: adminGame + "|car|" + k + "|" + c, name: c, label: "Car · " + (GAMES[adminGame].categories[k] ? GAMES[adminGame].categories[k].name : k) }); });
+    });
+    var cloudMissingAdmin = cloud.memoryMissing || cloud.profilesMissing;
+    var admLabel = { fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 };
+    var admBtn = function(disabled) { return { padding: "8px 18px", background: disabled ? "transparent" : C.acg, border: "1px solid " + (disabled ? C.bd : C.ac), borderRadius: 3, color: disabled ? C.td : C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.5, cursor: disabled ? "not-allowed" : "pointer" }; };
+    var admGhost = { padding: "8px 14px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1.5, cursor: "pointer" };
 
     return (
       <div style={{ height: "100%", background: C.bg, color: C.tx, display: "flex", flexDirection: "column" }}>
@@ -4801,23 +5052,164 @@ function App() {
         </div>
 
         {/* Section tabs */}
-        <div style={{ flexShrink: 0, background: C.sfc, borderBottom: "1px solid " + C.bd, display: "flex", padding: "0 20px", gap: 0 }}>
-          {[["categories","CATEGORIES"],["cars","CARS"],["tracks","TRACKS"],["users","USERS"]].map(function(t) {
+        <div style={{ flexShrink: 0, background: C.sfc, borderBottom: "1px solid " + C.bd, display: "flex", padding: isMobile ? "0 6px" : "0 20px", gap: 0, overflowX: "auto" }}>
+          {[["categories","CATEGORIES"],["cars","CARS"],["tracks","TRACKS"],["catalog","CATALOG"],["cloud","CLOUD"],["users","USERS"]].map(function(t) {
             var act = adminSection === t[0];
             var pendingCount = t[0] === "users" ? approvalUsers.filter(function(u) { return u.status === "pending"; }).length : 0;
+            var needsAttention = (t[0] === "catalog" && agStale) || (t[0] === "cloud" && cloudMissingAdmin);
             return (
               <button key={t[0]} onClick={function() { setAdminSection(t[0]); setAdminEditing(null); if (t[0] === "users") loadApprovalUsers(); }}
-                style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: 1.5, cursor: "pointer", marginBottom: -1, display: "flex", alignItems: "center", gap: 6 }}>
+                style={{ padding: isMobile ? "10px 11px" : "10px 18px", background: "transparent", border: "none", borderBottom: "2px solid " + (act ? C.ac : "transparent"), color: act ? C.ac : C.tm, fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, fontWeight: act ? 700 : 400, letterSpacing: isMobile ? 1 : 1.5, cursor: "pointer", marginBottom: -1, display: "flex", alignItems: "center", gap: 6, flexShrink: 0, whiteSpace: "nowrap" }}>
                 {t[1]}
                 {pendingCount > 0 && <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.warn, color: "#000", fontSize: 9, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>{pendingCount}</span>}
+                {needsAttention && <span title={t[0] === "cloud" ? "Cloud storage is not set up" : "Not checked for 30+ days"} style={{ width: 7, height: 7, borderRadius: "50%", background: C.warn }} />}
               </button>
             );
           })}
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflow: "auto", padding: "24px" }}>
-          {!adminGame && adminSection !== "users" && <div style={{ color: C.td, fontSize: 13, textAlign: "center", marginTop: 40 }}>Select a simulator above</div>}
+        <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "16px 14px 32px" : "24px" }}>
+          {!adminGame && adminSection !== "users" && adminSection !== "cloud" && <div style={{ color: C.td, fontSize: 13, textAlign: "center", marginTop: 40 }}>Select a simulator above</div>}
+
+          {/* ── FROZEN-LIST NOTICE ── */}
+          {adminGame && ["categories", "cars", "tracks", "catalog"].indexOf(adminSection) >= 0 && agGap.total > 0 && (
+            <div data-testid="legacy-banner" style={{ maxWidth: 760, marginBottom: 20, padding: "14px 16px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 4 }}>
+              <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 11, letterSpacing: 1.5, color: C.warn, marginBottom: 6 }}>⚠ YOUR SAVED LIST IS A FROZEN COPY</div>
+              <div style={{ fontSize: 13, color: C.ts, lineHeight: 1.6, marginBottom: 10 }}>
+                {agGap.total} {agGap.total === 1 ? "item that the app includes is" : "items that the app includes are"} missing from the {ag ? ag.name : "game"} list you edited earlier, so {agGap.total === 1 ? "it" : "they"} never appear in the setup builder. Tick what should appear — unticked items stay hidden. After converting, only your own changes are stored, so catalog updates arrive automatically.
+              </div>
+              <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid " + C.bd, borderRadius: 3, background: C.bg, marginBottom: 10 }}>
+                {agGapItems.map(function(it) {
+                  return (
+                    <label key={it.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid " + C.bd, fontSize: 13, color: C.tx, cursor: "pointer" }}>
+                      <input type="checkbox" checked={!legacyOff[it.key]} onChange={function() { setLegacyOff(function(p) { var n2 = Object.assign({}, p); if (n2[it.key]) delete n2[it.key]; else n2[it.key] = true; return n2; }); }} />
+                      <span style={{ flex: 1 }}>{it.name}</span>
+                      <span style={{ fontSize: 10.5, color: C.td }}>{it.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <button data-testid="legacy-convert" onClick={function() { convertLegacyList(adminGame); }} style={admBtn(false)}>CONVERT LIST</button>
+            </div>
+          )}
+
+          {/* ── CATALOG CHECK ── */}
+          {adminGame && adminSection === "catalog" && (
+            <div data-testid="catalog-panel" style={{ maxWidth: 760 }}>
+              <div style={admLabel}>CATALOG — {ag ? ag.name : ""}</div>
+              <div style={{ padding: "16px 18px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4, marginBottom: 18 }}>
+                <p style={{ fontSize: 13.5, color: C.ts, lineHeight: 1.65, margin: "0 0 14px" }}>Keeps the classes, cars and tracks of this simulator up to date. The engineer searches the web for the game's current content (base game and every DLC), compares it with your list and shows what is missing. Nothing changes until you review it and press ADD.</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                  <button data-testid="catalog-check" onClick={function() { runCatalogCheck(adminGame); }} disabled={agRun.status === "running"} style={admBtn(agRun.status === "running")}>{agRun.status === "running" ? "SEARCHING THE WEB…" : "CHECK FOR UPDATES"}</button>
+                  <span style={{ fontSize: 12, color: agStale ? C.warn : C.td }}>{agSyn.checked ? "Last checked " + fmtDate(agSyn.checked) : "Never checked"}{agSyn.ts ? " · last update added " + fmtDate(agSyn.ts) : ""}</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: C.td, marginTop: 12, lineHeight: 1.55 }}>Uses one web-search request on your Anthropic account and can take up to a minute. The search can be wrong, so only keep what you recognise.</div>
+              </div>
+
+              {agRun.status === "running" && (
+                <div data-testid="catalog-running" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 3, fontSize: 13, color: C.ts, marginBottom: 18 }}><Loader /> Searching official pages and community databases…</div>
+              )}
+              {agRun.status === "error" && (
+                <div data-testid="catalog-error" style={{ padding: "12px 14px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 3, fontSize: 13, color: C.danger, lineHeight: 1.55, marginBottom: 18 }}>The check failed: {agRun.error}</div>
+              )}
+
+              {agProp && agPropCount > 0 && (
+                <div data-testid="catalog-review" style={{ marginBottom: 18 }}>
+                  {[["categories", "NEW CLASSES"], ["cars", "NEW CARS"], ["tracks", "NEW TRACKS"]].map(function(sec) {
+                    var list = agProp[sec[0]]; if (!list.length) return null;
+                    return (
+                      <div key={sec[0]} style={{ marginBottom: 16 }}>
+                        <div style={admLabel}>{sec[1]} — {list.length}</div>
+                        <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf }}>
+                          {list.map(function(it) {
+                            return (
+                              <label key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: "1px solid " + C.bd, cursor: "pointer" }}>
+                                <input type="checkbox" checked={it.selected !== false} onChange={function(e) { toggleProposal(adminGame, sec[0], it.id, e.target.checked); }} />
+                                <span style={{ flex: 1, fontSize: 13.5, color: C.tx }}>{it.name}{sec[0] === "cars" && <span style={{ color: C.td, fontSize: 12 }}> → {it.catName}{!it.catKey ? " (new class)" : ""}</span>}</span>
+                                {it.source && <a href={it.source} target="_blank" rel="noopener noreferrer" onClick={function(e) { e.stopPropagation(); }} style={{ fontSize: 11, color: "#38bdf8" }}>source ↗</a>}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button data-testid="catalog-apply" disabled={!agPropPicked} onClick={function() { applyCatalog(adminGame); }} style={admBtn(!agPropPicked)}>ADD SELECTED ({agPropPicked})</button>
+                    <button onClick={function() { setAllProposals(adminGame, agPropPicked < agPropCount); }} style={admGhost}>{agPropPicked < agPropCount ? "SELECT ALL" : "SELECT NONE"}</button>
+                    <button onClick={function() { discardProposals(adminGame); }} style={admGhost}>DISCARD</button>
+                  </div>
+                </div>
+              )}
+              {agProp && agPropCount === 0 && (
+                <div data-testid="catalog-uptodate" style={{ padding: "12px 14px", background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 3, fontSize: 13, color: C.ok, marginBottom: 18 }}>
+                  {agRun.applied ? "Added " + agRun.applied + (agRun.applied === 1 ? " item" : " items") + " to the catalog." : "Everything is up to date — the search found nothing missing."}
+                </div>
+              )}
+
+              {agProp && agProp.suspect.length > 0 && (
+                <div data-testid="catalog-suspect" style={{ marginBottom: 18 }}>
+                  <div style={{ ...admLabel, color: C.warn }}>POSSIBLY WRONG — {agProp.suspect.length}</div>
+                  <div style={{ fontSize: 12, color: C.td, lineHeight: 1.55, marginBottom: 8 }}>In your list, but the search could not confirm them. They may be mod content or use a different in-game name — remove only what you know is wrong.</div>
+                  {agProp.suspect.map(function(sp, i) {
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                        <span style={{ fontSize: 9.5, letterSpacing: 1, color: C.td, fontFamily: "'Chakra Petch',sans-serif", flexShrink: 0 }}>{sp.kind === "car" ? "CAR" : "TRACK"}</span>
+                        <span style={{ flex: 1, fontSize: 13.5, color: C.tx }}>{sp.name}{sp.reason && <span style={{ color: C.td, fontSize: 12 }}> — {sp.reason}</span>}</span>
+                        {suspectInList(adminGame, sp) && <button onClick={function() { removeSuspect(adminGame, sp, i); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 2, color: C.danger, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>REMOVE</button>}
+                        <button onClick={function() { dropSuspect(adminGame, i); }} style={{ padding: "3px 10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.td, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>KEEP</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {Array.isArray(agSyn.log) && agSyn.log.length > 0 && (
+                <div data-testid="catalog-log" style={{ marginTop: 22 }}>
+                  <div style={admLabel}>RECENTLY ADDED BY THE CHECK</div>
+                  {agSyn.log.slice(-8).reverse().map(function(l, i) {
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", fontSize: 12.5, color: C.ts, borderBottom: "1px solid " + C.bd }}>
+                        <span style={{ color: C.td, width: 86, flexShrink: 0 }}>{fmtDate(l.ts)}</span>
+                        <span style={{ color: C.td, width: 64, flexShrink: 0, fontSize: 10.5, letterSpacing: 1, fontFamily: "'Chakra Petch',sans-serif" }}>{String(l.kind || "").toUpperCase()}</span>
+                        <span style={{ flex: 1 }}>{l.name}</span>
+                        {l.source && <a href={l.source} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#38bdf8" }}>source ↗</a>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── CLOUD STORAGE ── */}
+          {adminSection === "cloud" && (
+            <div data-testid="cloud-panel" style={{ maxWidth: 780 }}>
+              <div style={admLabel}>CLOUD STORAGE</div>
+              <p style={{ fontSize: 13.5, color: C.ts, lineHeight: 1.65, margin: "0 0 14px" }}>The engineer's memory (what it learned from feedback and ratings) and the verified car profiles live in two Supabase tables. Until they exist, everything stays in each person's own browser: it does not follow the driver to another device and is lost when the browser data is cleared.</p>
+              {[["Engineer memory", cloud.memory, cloud.memoryMissing], ["Car profiles", cloud.profiles, cloud.profilesMissing]].map(function(row) {
+                var st = row[2] ? ["Not set up yet", C.warn] : row[1] === "cloud" ? ["Connected", C.ok] : row[1] === "local" ? ["Not reachable — kept in this browser", C.warn] : ["Checking…", C.td];
+                return (
+                  <div key={row[0]} data-testid={"cloud-status-" + row[0].split(" ")[1].toLowerCase()} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", marginBottom: 3, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                    <span style={{ flex: 1, fontSize: 13.5, color: C.tx }}>{row[0]}</span>
+                    <span style={{ fontSize: 11, letterSpacing: 1, color: st[1], fontFamily: "'Chakra Petch',sans-serif" }}>{st[0].toUpperCase()}</span>
+                  </div>
+                );
+              })}
+              <div style={{ ...admLabel, marginTop: 20 }}>{cloudMissingAdmin ? "ONE-TIME SETUP" : "SETUP SCRIPT (ALREADY APPLIED)"}</div>
+              <ol style={{ fontSize: 13.5, color: C.ts, lineHeight: 1.75, margin: "0 0 12px", paddingLeft: 20 }}>
+                <li>Open your Supabase project and go to <b>SQL Editor → New query</b>.</li>
+                <li>Copy the script below, paste it and press <b>Run</b>. It is safe to run more than once.</li>
+                <li>Come back here and press <b>CHECK AGAIN</b>. Memory and profiles already saved on this device are uploaded automatically.</li>
+              </ol>
+              <pre data-testid="cloud-sql" style={{ margin: "0 0 12px", padding: "12px 14px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 3, color: C.ts, fontSize: 11.5, lineHeight: 1.5, maxHeight: 280, overflow: "auto", whiteSpace: "pre", fontFamily: "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" }}>{PW_CLOUD_SQL}</pre>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button data-testid="cloud-copy" onClick={function() { copyToClipboard(PW_CLOUD_SQL).then(function(ok) { setToast(ok ? "SQL copied" : "Could not copy — select the text and copy it manually"); }); }} style={admBtn(false)}>COPY SQL</button>
+                <button data-testid="cloud-recheck" onClick={recheckCloud} disabled={cloudBusy} style={cloudBusy ? admBtn(true) : admGhost}>{cloudBusy ? "CHECKING…" : "CHECK AGAIN"}</button>
+              </div>
+            </div>
+          )}
 
           {/* ── USERS ── */}
           {adminSection === "users" && (
@@ -4873,6 +5265,7 @@ function App() {
                 var modCount = (agMods.categories && agMods.categories[k]) ? agMods.categories[k].length : 0;
                 return (
                   <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 3 }}>
+                    {cat.synced && <AutoBadge />}
                     <EditInline type="bcat" id={k} value={cat.name} onSave={function(v) { renameBuiltinCat(adminGame, k, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                     <span style={{ fontSize: 11, color: C.td, flexShrink: 0 }}>{cat.cars.length} cars{modCount > 0 ? " + " + modCount + " MOD" : ""}</span>
                     <button onClick={function() { setAdminSection("cars"); setAdminCat(k); }} style={{ padding: "3px 10px", background: C.acg, border: "1px solid " + C.ac, borderRadius: 2, color: C.ac, fontFamily: "'Chakra Petch',sans-serif", fontSize: 9, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>MANAGE</button>
@@ -4950,6 +5343,7 @@ function App() {
                       {builtInCarsForAdminCat.map(function(car) {
                         return (
                           <div key={car} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 2, background: C.sf, border: "1px solid " + C.bd, borderRadius: 2 }}>
+                            {isAutoCar(adminCat, car) && <AutoBadge />}
                             <EditInline type={"bcar:" + adminCat} id={car} value={car} onSave={function(v) { renameBuiltinCar(adminGame, adminCat, car, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                             <button onClick={function() { removeBuiltinCar(adminGame, adminCat, car); }} style={{ padding: "3px 8px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                           </div>
@@ -4985,16 +5379,17 @@ function App() {
 
           {/* ── TRACKS ── */}
           {adminGame && adminSection === "tracks" && (
-            <div style={{ display: "flex", gap: 24, alignItems: "flex-start", height: "100%" }}>
+            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 24, alignItems: isMobile ? "stretch" : "flex-start", height: isMobile ? "auto" : "100%" }}>
 
               {/* Left: Built-in tracks — now editable */}
               {ag && (
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                   <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 2, color: C.td, marginBottom: 8 }}>BUILT-IN TRACKS — {agBuiltinTracks.length}</div>
-                  <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf, overflowY: "auto", flex: 1 }}>
+                  <div style={{ border: "1px solid " + C.bd, borderRadius: 3, background: C.sf, overflowY: "auto", flex: 1, maxHeight: isMobile ? 360 : "none" }}>
                     {agBuiltinTracks.map(function(t) {
                       return (
                         <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 14px", borderBottom: "1px solid " + C.bd }}>
+                          {isAutoTrack(t) && <AutoBadge />}
                           <EditInline type="btrack" id={t} value={t} onSave={function(v) { renameBuiltinTrack(adminGame, t, v); }} adminEditing={adminEditing} setAdminEditing={setAdminEditing} />
                           <button onClick={function() { removeBuiltinTrack(adminGame, t); }} style={{ padding: "2px 7px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 2, color: C.danger, fontSize: 11, cursor: "pointer", flexShrink: 0 }}>✕</button>
                         </div>
@@ -5024,7 +5419,7 @@ function App() {
 
                 <div style={{ marginTop: 12, padding: "14px", background: C.sf, border: "1px solid " + C.bd, borderRadius: 4 }}>
                   <div style={{ fontFamily: "'Chakra Petch',sans-serif", fontSize: 10, letterSpacing: 1.5, color: C.td, marginBottom: 4 }}>ADD MOD TRACK</div>
-                  <AdminInput k="newTrack" placeholder="Track name (e.g. Brasília Autódromo)" onAdd={function(v) { addModTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
+                  <AdminInput k="newTrack" placeholder="Track name (e.g. Brasilia Circuit)" onAdd={function(v) { addModTrack(adminGame, v); }} inputs={adminInputs} setInputs={setAdminInputs} />
                 </div>
               </div>
             </div>
