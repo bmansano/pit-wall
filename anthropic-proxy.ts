@@ -19,8 +19,11 @@
 //   ALLOWED_ORIGINS        [*]        comma separated list of sites allowed to call this function from a browser
 //   UPSTREAM_TIMEOUT_MS    [140000]   how long to wait for Anthropic
 //
+// This function verifies the user itself, so the gateway's "Verify JWT" switch can stay ON or OFF.
+//
 // What a request must look like:
-//   - header "Authorization: Bearer <the signed-in user's access token>" (the app sends it)
+//   - header "Authorization: Bearer <the signed-in user's access token>" (the app sends it; an app tab opened before
+//     this version was deployed does not, and must be reloaded)
 //   - the user must be the administrator or have status "approved" in public.user_approvals
 //   - JSON body with only: model, max_tokens, system, messages, tools, temperature, stop_sequences
 //     (fields starting with "_" are private log metadata and are never forwarded)
@@ -241,7 +244,7 @@ function makeHandler(env: Env, doFetch: Fetch) {
     if (cfg.enforceAuth) {
       if (!cfg.supabaseUrl || !cfg.anonKey) return reply(500, { error: { message: "SUPABASE_URL / SUPABASE_ANON_KEY are not available to this function." } });
       const m = /^Bearer\s+(\S+)$/i.exec(req.headers.get("authorization") ?? "");
-      if (!m) return refuse(401, "Sign in to use the engineer.", "no_token");
+      if (!m) return refuse(401, "Your session could not be verified. Reload the page and sign in again.", "no_token");
       try { who = await identify(cfg, m[1], t0); }
       catch (e) {
         console.log(JSON.stringify({ event: "anthropic_call_error", ts: new Date().toISOString(), error: e instanceof Error ? e.message : String(e) }));
