@@ -1,6 +1,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'; connect-src 'self' https://hugxfbcyyfltloufbgna.supabase.co https://commons.wikimedia.org https://challenges.cloudflare.com;">
+<!-- ^ Content-Security-Policy. It must stay the FIRST element after the charset (placed later, Chrome's preload scanner
+     mis-reads JSX in the inline script and requests bogus URLs). It limits where the page may send data — an injected
+     script could not post the sign-in token to another site — and blocks plugins, <base> hijacking and form posts elsewhere.
+     The Supabase address must match window.SB_URL: change both together. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PIT WALL — Sim Racing Setup Engineer</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0b'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23f97316' stroke-width='2.5'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-weight='900' font-size='13' fill='%23f97316' text-anchor='middle' letter-spacing='0.5'%3EPW%3C/text%3E%3C/svg%3E">
@@ -53,7 +58,7 @@
     .pw-created-by-label { display: none !important; }
   }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -61,12 +66,18 @@
 <div id="root"></div>
 <script>
 // ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
-// Paste your Supabase project values here (Settings → API):
+// Paste your Supabase project values here (Settings → API). Use the "anon" public key — NEVER the service_role key.
 window.SB_URL  = "https://hugxfbcyyfltloufbgna.supabase.co";
 window.SB_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1Z3hmYmN5eWZsdGxvdWZiZ25hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTE0ODYsImV4cCI6MjA5MTA2NzQ4Nn0.Xn-5ej7WPSwenlu-M5e0OvZiuEATztb7_FUeeAxLZ5Q";
 
-if (window.SB_URL !== "YOUR_SUPABASE_URL") {
-  window.sb = supabase.createClient(window.SB_URL, window.SB_KEY);
+// Cloudflare Turnstile site key (it is public). Leave empty until CAPTCHA is switched on in Supabase →
+// Authentication → Attack Protection; then paste the site key here and the sign-in / sign-up forms show the check.
+window.PW_TURNSTILE_SITEKEY = window.PW_TURNSTILE_SITEKEY || "";
+// Was this page opened from a password-reset e-mail? (The Supabase client clears the address, so note it first.)
+window.__PW_RECOVERY__ = /(?:^|[#&?])type=recovery(?:&|$)/.test(location.hash + "&" + location.search);
+// Never run over plain http (except on this computer): the sign-in token would travel unencrypted.
+if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+  location.replace("https://" + location.host + location.pathname + location.search + location.hash);
 }
 </script>
 <script id="pw-core">
@@ -124,6 +135,90 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
   PW.esc = function (s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   };
+
+  // ═════════════════════════ security helpers: passwords, sign-in errors, throttle, CSV, session storage ═════════════════════════
+  // Rules for NEW passwords (sign-up and reset). Signing in never applies them, so older accounts keep working.
+  var COMMON_PW = ("password,passw0rd,123456,1234567,12345678,123456789,1234567890,12345678910,qwerty,qwertyuiop,qwerty123,azerty,asdfghjkl,zxcvbnm,abc123,abcd1234,password1,password123," +
+    "iloveyou,admin,administrator,welcome,monkey,dragon,letmein,football,baseball,basketball,master,sunshine,princess,login,starwars,hello,freedom,whatever,trustno1,superman,batman,shadow," +
+    "michael,jennifer,computer,internet,changeme,secret,default,guest,pitwall,simracing,racing,formula1,formula,ferrari,senna,verstappen,hamilton,interlagos,bm3racing,bm3,corinthians," +
+    "flamengo,palmeiras,saopaulo,santos,gremio,cruzeiro,brasil,brazil,senha,senha123,minhasenha,mudar123,amor123").split(",");
+  function deleet(s) { return s.replace(/[@4]/g, "a").replace(/0/g, "o").replace(/[1!|]/g, "i").replace(/3/g, "e").replace(/[$5]/g, "s").replace(/7/g, "t"); }
+  var COMMON_KEYS = COMMON_PW.map(function (w) { var k = deleet(w).replace(/[^a-z0-9]/g, ""); return { k: k, kl: k.replace(/[0-9]/g, "") }; });
+  PW.password = {
+    MIN: 10, MAX: 128,
+    check: function (pw, email) {
+      var p = String(pw == null ? "" : pw), problems = [];
+      if (p.length < PW.password.MIN) problems.push("Use at least " + PW.password.MIN + " characters.");
+      if (p.length > PW.password.MAX) problems.push("Use at most " + PW.password.MAX + " characters.");
+      var low = p.toLowerCase(), de = deleet(low), alnum = de.replace(/[^a-z0-9]/g, ""), letters = de.replace(/[^a-z]/g, "");
+      var common = COMMON_KEYS.some(function (c) { return alnum === c.k || (c.kl.length >= 5 && letters.indexOf(c.kl) === 0 && p.length <= c.k.length + 6); });
+      if (common) problems.push("This password is too common or too easy to guess.");
+      if (/^[0-9]+$/.test(p)) problems.push("Do not use only digits.");
+      if (/^(.)\1+$/.test(p)) problems.push("Do not repeat one character.");
+      if (/^(0123456789|1234567890|abcdefghij|qwertyuiop|asdfghjkl)/i.test(p) && p.length <= 14) problems.push("This password starts with an easy sequence.");
+      var local = String(email || "").split("@")[0].toLowerCase();
+      if (local.length >= 4 && low.indexOf(local) >= 0) problems.push("Do not include your email name in the password.");
+      return { ok: problems.length === 0, problems: problems };
+    },
+  };
+
+  // Server errors → plain words. Never shows the server's raw text. kind: credentials | rate | captcha | network | other.
+  PW.authError = function (err) {
+    var msg = err && err.message ? String(err.message) : String(err || ""), code = err && err.code ? String(err.code) : "", status = err && err.status ? Number(err.status) : 0;
+    var r = function (kind, message, retry) { return { kind: kind, message: message, retry: retry || 0 }; };
+    if (/^Too many failed sign-in attempts/.test(msg)) return r("rate", msg, 300);
+    if (status === 429 || /over_(request|email_send|sms_send)_rate_limit/.test(code) || /rate limit|too many requests/i.test(msg)) return r("rate", "Too many attempts. Please wait a few minutes and try again.", 60);
+    if (/captcha/i.test(code + " " + msg)) return r("captcha", "The security check failed. Please try again.");
+    if (code === "invalid_credentials" || /invalid login credentials/i.test(msg)) return r("credentials", "Incorrect email or password.");
+    if (code === "email_not_confirmed" || /email not confirmed/i.test(msg)) return r("other", "Please confirm your email before signing in.");
+    if (code === "user_already_exists" || /already (been )?registered/i.test(msg)) return r("other", "This email is already registered.");
+    if (code === "same_password" || /different from the old password/i.test(msg)) return r("other", "Choose a password you have not used before.");
+    if (code === "weak_password" || /password (should|is too|is known|must)|weak password/i.test(msg)) return r("other", "That password is not accepted. Use at least 10 characters and avoid common or leaked passwords.");
+    if (code === "validation_failed" || code === "email_address_invalid" || /unable to validate email|invalid format|invalid email/i.test(msg)) return r("other", "Invalid email address.");
+    if (code === "signup_disabled" || /signups? (not allowed|disabled)/i.test(msg)) return r("other", "New accounts are not being accepted right now.");
+    if (/session missing|session_not_found|jwt expired|refresh_token_not_found|invalid (jwt|token)|otp_expired|expired/i.test(code + " " + msg)) return r("other", "This link has expired. Request a new one.");
+    if (/failed to fetch|fetch failed|load failed|networkerror|network request failed/i.test(msg)) return r("network", "Could not connect to the server. Check your connection and try again.");
+    return r("other", "Something went wrong. Please try again." + (code ? " (" + code + ")" : ""));
+  };
+
+  // Progressive pause after repeated wrong passwords on THIS browser. It is a courtesy (it stops accidental hammering
+  // and shows a countdown); the real protection is on the server (Supabase rate limits, CAPTCHA, the account hook).
+  PW.lockout = (function () {
+    var KEY = "pw_login_throttle", WINDOW = 15 * 60 * 1000, FREE = 5, BASE = 15000, CAP = 15 * 60 * 1000;
+    function fresh() { return { fails: [], until: 0 }; }
+    function clean(s, now) { var st = (s && Array.isArray(s.fails)) ? s : fresh(); return { fails: st.fails.filter(function (t) { return typeof t === "number" && now - t < WINDOW; }), until: typeof st.until === "number" ? st.until : 0 }; }
+    return {
+      fail: function (state, now) { var s = clean(state, now); s.fails.push(now); if (s.fails.length >= FREE) s.until = Math.max(s.until, now + Math.min(CAP, BASE * Math.pow(2, s.fails.length - FREE))); return s; },
+      block: function (state, now, seconds) { var s = clean(state, now); s.until = Math.max(s.until, now + Math.max(0, seconds) * 1000); return s; },
+      wait: function (state, now) { var s = clean(state, now); return s.until > now ? Math.ceil((s.until - now) / 1000) : 0; },
+      reset: fresh,
+      load: function () { return clean(lsGet(KEY), Date.now()); },
+      save: function (s) { lsSet(KEY, s); },
+    };
+  })();
+
+  // CSV that is safe to open in a spreadsheet: quotes are doubled and a cell that would run as a formula is neutralised.
+  PW.csv = {
+    cell: function (v) {
+      var s = String(v == null ? "" : v).replace(/[\r\n]+/g, " ");
+      var plainNumber = /^-[0-9][0-9\s.,\/°%A-Za-z-]*$/;            // "-3.2 deg", "-3.2 / -3.0": a minus sign in front of numbers is not a formula
+      if (/^[=+@\t]/.test(s) || (s.charAt(0) === "-" && !plainNumber.test(s))) s = "'" + s;
+      return '"' + s.replace(/"/g, '""') + '"';
+    },
+    row: function (cells) { return cells.map(PW.csv.cell).join(","); },
+  };
+
+  // Where the sign-in session lives: "remember me" → localStorage; otherwise sessionStorage (gone when the tab closes).
+  // The choice is stored under modeKey ("local" | "session") just before signing in.
+  PW.sessionStorageAdapter = function (local, session, modeKey) {
+    function mode() { try { return local && local.getItem(modeKey) === "session" ? "session" : "local"; } catch (e) { return "local"; } }
+    return {
+      getItem: function (k) { try { var v = session ? session.getItem(k) : null; return v != null ? v : (local ? local.getItem(k) : null); } catch (e) { return null; } },
+      setItem: function (k, v) { try { var m = mode(), keep = m === "session" ? session : local, drop = m === "session" ? local : session; if (keep) keep.setItem(k, v); if (drop) drop.removeItem(k); } catch (e) {} },
+      removeItem: function (k) { try { if (session) session.removeItem(k); if (local) local.removeItem(k); } catch (e) {} },
+    };
+  };
+  PW.setRemember = function (remember) { try { root.localStorage.setItem("pw_session_mode", remember ? "local" : "session"); } catch (e) {} };
 
   // ═════════════════════════ setup table parsing ═════════════════════════
   // Group-aware: the same parameter name can appear under several headings (Front / Rear ...).
@@ -905,6 +1000,16 @@ if (window.SB_URL !== "YOUR_SUPABASE_URL") {
   root.PW = PW;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
+<script>
+// ── SUPABASE CLIENT ── (created after the core: the session storage adapter lives there)
+// "Remember me" keeps the session in localStorage; without it the session lives in sessionStorage and is gone when the
+// tab or browser closes. Only an https address is accepted (plain http only for a Supabase running on this computer).
+if (window.SB_URL && window.SB_URL !== "YOUR_SUPABASE_URL" && (/^https:\/\//.test(window.SB_URL) || /^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(window.SB_URL))) {
+  window.sb = supabase.createClient(window.SB_URL, window.SB_KEY, {
+    auth: { storage: PW.sessionStorageAdapter((function () { try { return window.localStorage; } catch (e) { return null; } })(), (function () { try { return window.sessionStorage; } catch (e) { return null; } })(), "pw_session_mode") },
+  });
+}
+</script>
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
 
@@ -920,47 +1025,62 @@ var PW_MODELS = { build: "claude-sonnet-5", adjust: "claude-haiku-4-5", extract:
 // One-time Supabase setup for the engineer's memory and the shared car profiles (identical to supabase/engineer-memory.sql).
 var PW_CLOUD_SQL = `-- PIT WALL — cloud storage for the engineer's memory and the shared car profiles.
 -- Run once in Supabase → SQL Editor → New query → paste → Run. Safe to run again.
+-- (The same script is shown in the app under ADMIN → CLOUD. supabase/security-rls.sql contains it too.)
 
--- 1) Who may use shared data: the admin, or any user whose registration was approved.
-create or replace function public.pw_is_approved()
+begin;
+
+-- >>> shared: administrator and approval helpers (identical in every PIT WALL script — keep them in sync)
+-- The administrator is identified by account id, not by a text e-mail: the address is only used once, below,
+-- to find the account.
+create table if not exists public.app_admins (
+  user_id uuid primary key references auth.users (id) on delete cascade
+);
+alter table public.app_admins enable row level security;
+revoke all on table public.app_admins from anon, authenticated;   -- no policies: only the functions below can read it
+
+do $$
+declare
+  admin_email constant text := 'bmansano@gmail.com';              -- ← the administrator's account (it must already exist)
+begin
+  insert into public.app_admins (user_id)
+    select id from auth.users where lower(email) = lower(admin_email)
+    on conflict do nothing;
+  if not exists (select 1 from public.app_admins) then
+    raise exception 'No account found for % — create it first (sign up in the app) or edit admin_email above, then run this script again.', admin_email;
+  end if;
+end $$;
+
+create or replace function public.pw_is_admin()
 returns boolean
 language sql
 stable
 security definer
-set search_path = public
-as $$
-  select coalesce((auth.jwt() ->> 'email') = 'bmansano@gmail.com', false)
-      or exists (
-        select 1 from public.user_approvals a
-        where a.user_id = auth.uid() and a.status = 'approved'
-      );
-$$;
-revoke all on function public.pw_is_approved() from public, anon;
-grant execute on function public.pw_is_approved() to authenticated;
+set search_path = ''
+as $$ select exists (select 1 from public.app_admins a where a.user_id = auth.uid()) $$;
 
--- 2) Engineer memory: one private row per user (lessons + rated reference setups).
+create or replace function public.pw_is_approved()
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  return public.pw_is_admin()
+      or exists (select 1 from public.user_approvals u where u.user_id::text = auth.uid()::text and u.status = 'approved');
+end
+$$;
+
+revoke all on function public.pw_is_admin(), public.pw_is_approved() from public, anon;
+grant execute on function public.pw_is_admin(), public.pw_is_approved() to authenticated;
+-- <<< shared
+
+-- >>> shared: engineer memory (private per user) and car profiles (shared by approved users) — identical in every PIT WALL script
 create table if not exists public.engineer_memory (
   user_id    uuid primary key references auth.users (id) on delete cascade,
   data       jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
-alter table public.engineer_memory enable row level security;
-grant select, insert, update, delete on public.engineer_memory to authenticated;
-
-drop policy if exists "engineer_memory_select_own" on public.engineer_memory;
-drop policy if exists "engineer_memory_insert_own" on public.engineer_memory;
-drop policy if exists "engineer_memory_update_own" on public.engineer_memory;
-drop policy if exists "engineer_memory_delete_own" on public.engineer_memory;
-create policy "engineer_memory_select_own" on public.engineer_memory
-  for select to authenticated using (auth.uid() = user_id);
-create policy "engineer_memory_insert_own" on public.engineer_memory
-  for insert to authenticated with check (auth.uid() = user_id);
-create policy "engineer_memory_update_own" on public.engineer_memory
-  for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "engineer_memory_delete_own" on public.engineer_memory
-  for delete to authenticated using (auth.uid() = user_id);
-
--- 3) Car parameter profiles (read from the game's setup screens): shared by all approved users.
 create table if not exists public.car_profiles (
   id         text primary key,
   game       text not null,
@@ -969,21 +1089,43 @@ create table if not exists public.car_profiles (
   created_by uuid references auth.users (id) on delete set null,
   updated_at timestamptz not null default now()
 );
+alter table public.engineer_memory enable row level security;
 alter table public.car_profiles enable row level security;
-grant select, insert, update, delete on public.car_profiles to authenticated;
+revoke all on table public.engineer_memory, public.car_profiles from anon, authenticated;
+grant select, insert, update, delete on table public.engineer_memory, public.car_profiles to authenticated;
+
+drop policy if exists "engineer_memory_select_own" on public.engineer_memory;
+drop policy if exists "engineer_memory_insert_own" on public.engineer_memory;
+drop policy if exists "engineer_memory_update_own" on public.engineer_memory;
+drop policy if exists "engineer_memory_delete_own" on public.engineer_memory;
+create policy "engineer_memory_select_own" on public.engineer_memory
+  for select to authenticated using ((select public.pw_is_approved()) and user_id = (select auth.uid()));
+create policy "engineer_memory_insert_own" on public.engineer_memory
+  for insert to authenticated with check ((select public.pw_is_approved()) and user_id = (select auth.uid()));
+create policy "engineer_memory_update_own" on public.engineer_memory
+  for update to authenticated using ((select public.pw_is_approved()) and user_id = (select auth.uid()))
+  with check ((select public.pw_is_approved()) and user_id = (select auth.uid()));
+create policy "engineer_memory_delete_own" on public.engineer_memory
+  for delete to authenticated using (user_id = (select auth.uid()));
 
 drop policy if exists "car_profiles_select_approved" on public.car_profiles;
 drop policy if exists "car_profiles_insert_approved" on public.car_profiles;
 drop policy if exists "car_profiles_update_approved" on public.car_profiles;
 drop policy if exists "car_profiles_delete_owner_admin" on public.car_profiles;
 create policy "car_profiles_select_approved" on public.car_profiles
-  for select to authenticated using (public.pw_is_approved());
+  for select to authenticated using ((select public.pw_is_approved()));
 create policy "car_profiles_insert_approved" on public.car_profiles
-  for insert to authenticated with check (public.pw_is_approved() and auth.uid() = created_by);
+  for insert to authenticated with check ((select public.pw_is_approved()) and created_by = (select auth.uid()));
 create policy "car_profiles_update_approved" on public.car_profiles
-  for update to authenticated using (public.pw_is_approved()) with check (public.pw_is_approved() and auth.uid() = created_by);
+  for update to authenticated using ((select public.pw_is_approved()))
+  with check ((select public.pw_is_approved()) and created_by = (select auth.uid()));
 create policy "car_profiles_delete_owner_admin" on public.car_profiles
-  for delete to authenticated using (auth.uid() = created_by or (auth.jwt() ->> 'email') = 'bmansano@gmail.com');
+  for delete to authenticated using (created_by = (select auth.uid()) or (select public.pw_is_admin()));
+-- <<< shared
+
+commit;
+
+notify pgrst, 'reload schema';
 `;
 
 function copyToClipboard(text) {
@@ -1020,16 +1162,21 @@ function fileToJpeg(file) {
   });
 }
 
-// Every Claude call goes through the Supabase Edge Function. The signed-in user's access token is sent
-// so the function can verify who is calling (the anon key alone is public).
-async function callClaude(payload) {
-  var token = null;
+// Headers for every call to the project's Edge Functions: the public key plus the signed-in user's access token, so the
+// function can verify who is calling (the public key alone identifies nobody — anyone can read it in the page).
+async function authHeaders() {
+  var h = { "Content-Type": "application/json", "apikey": window.SB_KEY };
   try {
     var sess = await window.sb.auth.getSession();
-    token = sess && sess.data && sess.data.session ? sess.data.session.access_token : null;
+    var token = sess && sess.data && sess.data.session ? sess.data.session.access_token : null;
+    if (token) h["Authorization"] = "Bearer " + token;
   } catch (e) {}
-  var headers = { "Content-Type": "application/json", "apikey": window.SB_KEY };
-  if (token) headers["Authorization"] = "Bearer " + token;
+  return h;
+}
+
+// Every Claude call goes through the Supabase Edge Function.
+async function callClaude(payload) {
+  var headers = await authHeaders();
   var res = await fetch(window.SB_URL + "/functions/v1/anthropic-proxy", { method: "POST", headers: headers, body: JSON.stringify(payload) });
   var d = null;
   try { d = await res.json(); } catch (e) { throw new Error("The engineer service did not answer correctly (HTTP " + res.status + "). Try again in a moment."); }
@@ -1883,6 +2030,11 @@ function EditInline(props) {
   );
 }
 
+// Image wrapper. Chrome's preload scanner reads the text of this inline script as if it were HTML, so an image tag written
+// out in the JSX with a placeholder address makes it request that placeholder as a real address (a 404 in the console).
+// Images are therefore created through this component, and no angle-bracket image tag appears anywhere in the source.
+function Pic(props) { return React.createElement("img", props); }
+
 function Loader() {
   var _s = useState(0); var d = _s[0]; var setD = _s[1];
   useEffect(function() { var iv = setInterval(function() { setD(function(p) { return (p + 1) % 4; }); }, 280); return function() { clearInterval(iv); }; }, []);
@@ -2071,6 +2223,52 @@ function SupabaseSetupScreen() {
   );
 }
 
+// ── CAPTCHA (Cloudflare Turnstile) — only when window.PW_TURNSTILE_SITEKEY is set ──────────────────────────────
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (window.__pwTurnstile) return window.__pwTurnstile;
+  window.__pwTurnstile = new Promise(function(resolve, reject) {
+    var sc = document.createElement("script");
+    sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    sc.async = true; sc.defer = true;
+    sc.onload = function() { if (window.turnstile) resolve(window.turnstile); else { window.__pwTurnstile = null; reject(new Error("captcha")); } };
+    sc.onerror = function() { window.__pwTurnstile = null; reject(new Error("captcha")); };
+    document.head.appendChild(sc);
+  });
+  return window.__pwTurnstile;
+}
+
+function CaptchaBox(props) {
+  var boxRef = useRef(null); var widgetRef = useRef(null);
+  var _failed = useState(false); var failed = _failed[0]; var setFailed = _failed[1];
+  var onToken = props.onToken;
+  useEffect(function() {
+    var alive = true;
+    loadTurnstile().then(function(ts) {
+      if (!alive || !boxRef.current) return;
+      widgetRef.current = ts.render(boxRef.current, {
+        sitekey: props.siteKey, theme: "dark",
+        callback: function(token) { onToken(token); },
+        "expired-callback": function() { onToken(null); },
+        "error-callback": function() { onToken(null); },
+      });
+    }, function() { if (alive) setFailed(true); });
+    return function() { alive = false; try { if (window.turnstile && widgetRef.current != null) window.turnstile.remove(widgetRef.current); } catch (e) {} widgetRef.current = null; };
+  }, [props.siteKey]);
+  // a token works once: the form bumps resetSignal after every attempt
+  useEffect(function() { try { if (window.turnstile && widgetRef.current != null) { window.turnstile.reset(widgetRef.current); onToken(null); } } catch (e) {} }, [props.resetSignal]);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div ref={boxRef} data-testid="captcha-box" style={{ minHeight: 65 }} />
+      {failed && <div style={{ padding: "9px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 4, color: "#f87171", fontSize: 12, lineHeight: 1.5 }}>The security check could not load. Check your connection, turn off content blockers for this site and reload the page.</div>}
+    </div>
+  );
+}
+
+function fmtWait(sec) { return Math.floor(sec / 60) + ":" + ("0" + (sec % 60)).slice(-2); }
+var AUTH_INPUT = { width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" };
+var AUTH_LABEL = { display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 };
+
 // ── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin, initialMode }) {
   var _mode = useState(initialMode || "login"); var mode = _mode[0]; var setMode = _mode[1];
@@ -2081,44 +2279,58 @@ function AuthScreen({ onLogin, initialMode }) {
   var _err = useState(null); var error = _err[0]; var setError = _err[1];
   var _busy = useState(false); var busy = _busy[0]; var setBusy = _busy[1];
   var _sent = useState(false); var sent = _sent[0]; var setSent = _sent[1];
+  var siteKey = window.PW_TURNSTILE_SITEKEY || ""; var captchaOn = !!siteKey;
+  var _cap = useState(null); var captcha = _cap[0]; var setCaptcha = _cap[1];
+  var _capR = useState(0); var capReset = _capR[0]; var setCapReset = _capR[1];
+  // pause after repeated wrong passwords on this browser (seconds left)
+  var _wait = useState(function() { return PW.lockout.wait(PW.lockout.load(), Date.now()); }); var wait = _wait[0]; var setWait = _wait[1];
+  useEffect(function() {
+    if (wait <= 0) return;
+    var iv = setInterval(function() { setWait(PW.lockout.wait(PW.lockout.load(), Date.now())); }, 1000);
+    return function() { clearInterval(iv); };
+  }, [wait > 0]);
 
-  function switchMode(m) { setMode(m); setError(null); setPassword(""); setPassword2(""); setSent(false); }
-
-  function sbErr(e) {
-    var map = {
-      "Invalid login credentials": "Incorrect email or password.",
-      "Email not confirmed": "Please confirm your email before signing in.",
-      "User already registered": "This email is already registered.",
-      "Password should be at least 6 characters": "Password must be at least 6 characters.",
-      "Unable to validate email address: invalid format": "Invalid email address.",
-      "Email rate limit exceeded": "Too many attempts. Please wait a few minutes.",
-      "Failed to fetch": "Could not connect to the server. Check that your Supabase project is active (supabase.com → your project) and that your site URL is authorised in Authentication → URL Configuration.",
-      "fetch failed": "Could not connect to the server. Check that your Supabase project is active (supabase.com → your project) and that your site URL is authorised in Authentication → URL Configuration.",
-      "Load failed": "Could not connect to the server. Check your connection and that your Supabase project is active.",
-    };
-    var msg = e && e.message ? e.message : String(e);
-    return map[msg] || msg || "An error occurred. Please try again.";
+  function switchMode(m) { setMode(m); setError(null); setPassword(""); setPassword2(""); setSent(false); setCapReset(function(n) { return n + 1; }); }
+  function finished() { setBusy(false); setCapReset(function(n) { return n + 1; }); }       // a security-check token works only once
+  function failed(err) {
+    var f = PW.authError(err);
+    if (f.kind === "credentials") { var st = PW.lockout.fail(PW.lockout.load(), Date.now()); PW.lockout.save(st); setWait(PW.lockout.wait(st, Date.now())); }
+    else if (f.kind === "rate") { var st2 = PW.lockout.block(PW.lockout.load(), Date.now(), f.retry); PW.lockout.save(st2); setWait(PW.lockout.wait(st2, Date.now())); }
+    else if (f.kind === "other") console.warn("auth:", err && (err.code || err.status || err.message));
+    setError(f.message); finished();
+  }
+  function ready() {                                                  // checks shared by every form before a request is sent
+    if (busy) return false;
+    if (wait > 0) { setError("Too many attempts. Try again in " + fmtWait(wait) + "."); return false; }
+    if (captchaOn && !captcha) { setError("Please complete the security check."); return false; }
+    return true;
   }
 
   function doLogin(e) {
-    e.preventDefault(); setBusy(true); setError(null);
-    window.sb.auth.signInWithPassword({ email: email, password: password })
+    e.preventDefault(); if (!ready()) return;
+    setBusy(true); setError(null);
+    PW.setRemember(remember);                                         // decides where the session is kept — before it is created
+    var creds = { email: email.trim(), password: password };
+    if (captchaOn) creds.options = { captchaToken: captcha };
+    window.sb.auth.signInWithPassword(creds)
       .then(function(res) {
         if (res.error) throw res.error;
-        if (!remember) {
-          // Session expires on browser close: listen for beforeunload
-          window.addEventListener("beforeunload", function() { window.sb.auth.signOut(); }, { once: true });
-        }
+        PW.lockout.save(PW.lockout.reset());
         onLogin(res.data.user);
       })
-      .catch(function(err) { setError(sbErr(err)); setBusy(false); });
+      .catch(failed);
   }
 
   function doRegister(e) {
     e.preventDefault(); setError(null);
+    var chk = PW.password.check(password, email);
+    if (!chk.ok) { setError(chk.problems.join(" ")); return; }
     if (password !== password2) { setError("Passwords do not match."); return; }
+    if (!ready()) return;
     setBusy(true);
-    window.sb.auth.signUp({ email: email, password: password })
+    var opts = { emailRedirectTo: window.location.origin + window.location.pathname };
+    if (captchaOn) opts.captchaToken = captcha;
+    window.sb.auth.signUp({ email: email.trim(), password: password, options: opts })
       .then(function(res) {
         if (res.error) throw res.error;
         // If email confirmation is disabled the session is immediate — insert approval row
@@ -2129,23 +2341,27 @@ function AuthScreen({ onLogin, initialMode }) {
           );
         }
         // Always show pending message, never go directly into the app
-        setSent(true); setBusy(false);
+        setSent(true); finished();
       })
-      .catch(function(err) { setError(sbErr(err)); setBusy(false); });
+      .catch(failed);
   }
 
   function doForgot(e) {
-    e.preventDefault(); setBusy(true); setError(null);
-    window.sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href })
+    e.preventDefault(); if (!ready()) return;
+    setBusy(true); setError(null);
+    var opts = { redirectTo: window.location.origin + window.location.pathname };
+    if (captchaOn) opts.captchaToken = captcha;
+    window.sb.auth.resetPasswordForEmail(email.trim(), opts)
       .then(function(res) {
         if (res.error) throw res.error;
-        setSent(true); setBusy(false);
+        setSent(true); finished();
       })
-      .catch(function(err) { setError(sbErr(err)); setBusy(false); });
+      .catch(failed);
   }
 
   var onSubmit = mode === "login" ? doLogin : mode === "register" ? doRegister : doForgot;
-  var submitLabel = busy ? "..." : mode === "login" ? "SIGN IN" : mode === "register" ? "CREATE ACCOUNT" : "SEND LINK";
+  var blocked = busy || wait > 0 || (captchaOn && !captcha);
+  var submitLabel = busy ? "..." : wait > 0 ? "WAIT " + fmtWait(wait) : mode === "login" ? "SIGN IN" : mode === "register" ? "CREATE ACCOUNT" : "SEND LINK";
 
   return (
     <div style={{ height: "100%", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -2159,7 +2375,7 @@ function AuthScreen({ onLogin, initialMode }) {
         </div>
       </div>
 
-      <div style={{ width: 400, background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "32px 36px" }}>
+      <div style={{ width: 400, maxWidth: "calc(100vw - 32px)", background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "32px 36px" }}>
         {mode !== "forgot" && (
           <div style={{ display: "flex", borderBottom: "1px solid " + C.bd, marginBottom: 28 }}>
             {[["login", "SIGN IN"], ["register", "CREATE ACCOUNT"]].map(function(item) {
@@ -2185,7 +2401,7 @@ function AuthScreen({ onLogin, initialMode }) {
             <div style={{ fontSize: 11, letterSpacing: 1, color: C.ok, marginBottom: 10 }}>{mode === "forgot" ? "EMAIL SENT" : "REGISTRATION SUBMITTED"}</div>
             <p style={{ color: C.ts, fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
               {mode === "forgot"
-                ? "Check your inbox and click the link to reset your password."
+                ? "If this email has an account, a link to choose a new password is on its way. Check your inbox."
                 : "Your registration has been received and is awaiting admin approval. You will receive access once approved."}
             </p>
             <button onClick={function() { switchMode("login"); }} style={{ color: C.ac, background: "none", border: "none", fontSize: 12, cursor: "pointer" }}>Back to sign in</button>
@@ -2193,23 +2409,23 @@ function AuthScreen({ onLogin, initialMode }) {
         ) : (
           <form onSubmit={onSubmit}>
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>EMAIL</label>
-              <input type="email" required value={email} onChange={function(e) { setEmail(e.target.value); }} placeholder="you@email.com"
-                style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
+              <label style={AUTH_LABEL}>EMAIL</label>
+              <input type="email" required autoComplete={mode === "register" ? "email" : "username"} value={email} onChange={function(e) { setEmail(e.target.value); }} placeholder="you@email.com" style={AUTH_INPUT} />
             </div>
             {mode !== "forgot" && (
               <div style={{ marginBottom: mode === "login" ? 6 : 14 }}>
-                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>PASSWORD</label>
-                <input type="password" required minLength={6} value={password} onChange={function(e) { setPassword(e.target.value); }} placeholder="••••••••"
-                  style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
+                <label style={AUTH_LABEL}>PASSWORD</label>
+                <input type="password" required minLength={mode === "register" ? PW.password.MIN : undefined} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={function(e) { setPassword(e.target.value); }} placeholder="••••••••" style={AUTH_INPUT} />
               </div>
             )}
             {mode === "register" && (
-              <div style={{ marginBottom: 22 }}>
-                <label style={{ display: "block", fontSize: 9, letterSpacing: 2, color: C.td, marginBottom: 6 }}>CONFIRM PASSWORD</label>
-                <input type="password" required minLength={6} value={password2} onChange={function(e) { setPassword2(e.target.value); }} placeholder="••••••••"
-                  style={{ width: "100%", padding: "10px 13px", background: C.bg, border: "1px solid " + C.bd, borderRadius: 4, color: C.tx, fontSize: 13, boxSizing: "border-box" }} />
+              <div style={{ marginBottom: 12 }}>
+                <label style={AUTH_LABEL}>CONFIRM PASSWORD</label>
+                <input type="password" required minLength={PW.password.MIN} autoComplete="new-password" value={password2} onChange={function(e) { setPassword2(e.target.value); }} placeholder="••••••••" style={AUTH_INPUT} />
               </div>
+            )}
+            {mode === "register" && (
+              <p style={{ fontSize: 11, color: C.td, marginBottom: 18, lineHeight: 1.55 }}>Use at least {PW.password.MIN} characters — several words work well. The administrator must approve your account before you can use PIT WALL.</p>
             )}
             {mode === "login" && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
@@ -2220,17 +2436,61 @@ function AuthScreen({ onLogin, initialMode }) {
                 <button type="button" onClick={function() { switchMode("forgot"); }} style={{ background: "none", border: "none", color: C.ac, fontSize: 11, cursor: "pointer" }}>Forgot password</button>
               </div>
             )}
-            {mode === "register" && (
-              <p style={{ fontSize: 11, color: C.td, marginBottom: 18, lineHeight: 1.5 }}>After creating your account you will have full access to PIT WALL.</p>
-            )}
+            {mode === "forgot" && <div style={{ height: 8 }} />}
+            {captchaOn && <CaptchaBox siteKey={siteKey} resetSignal={capReset} onToken={setCaptcha} />}
             {error && (
-              <div style={{ marginBottom: 14, padding: "9px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 4, color: "#f87171", fontSize: 12 }}>{error}</div>
+              <div role="alert" data-testid="auth-error" style={{ marginBottom: 14, padding: "9px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 4, color: "#f87171", fontSize: 12, lineHeight: 1.5 }}>{error}</div>
             )}
-            <button type="submit" disabled={busy} style={{ width: "100%", padding: "12px", background: busy ? C.bd : C.ac, border: "none", borderRadius: 4, color: busy ? C.td : "#000", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: busy ? "not-allowed" : "pointer" }}>
+            <button type="submit" data-testid="auth-submit" disabled={blocked} style={{ width: "100%", padding: "12px", background: blocked ? C.bd : C.ac, border: "none", borderRadius: 4, color: blocked ? C.td : "#000", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: blocked ? "not-allowed" : "pointer" }}>
               {submitLabel}
             </button>
           </form>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── NEW PASSWORD (after the link in the password-reset e-mail) ────────────────────
+function NewPasswordScreen(props) {
+  var _pw = useState(""); var pw = _pw[0]; var setPw = _pw[1];
+  var _pw2 = useState(""); var pw2 = _pw2[0]; var setPw2 = _pw2[1];
+  var _err = useState(null); var err = _err[0]; var setErr = _err[1];
+  var _busy = useState(false); var busy = _busy[0]; var setBusy = _busy[1];
+  function submit(e) {
+    e.preventDefault(); setErr(null);
+    var chk = PW.password.check(pw, props.email);
+    if (!chk.ok) { setErr(chk.problems.join(" ")); return; }
+    if (pw !== pw2) { setErr("Passwords do not match."); return; }
+    setBusy(true);
+    window.sb.auth.updateUser({ password: pw })
+      .then(function(res) {
+        if (res.error) throw res.error;
+        // end every OTHER session of this account: whoever had the old password loses access
+        try { var p = window.sb.auth.signOut({ scope: "others" }); if (p && p.catch) p.catch(function() {}); } catch (e2) {}
+        props.onDone();
+      })
+      .catch(function(e3) { setErr(PW.authError(e3).message); setBusy(false); });
+  }
+  return (
+    <div style={{ height: "100%", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div data-testid="new-password" style={{ width: 400, maxWidth: "calc(100vw - 32px)", background: C.sf, border: "1px solid " + C.bd, borderRadius: 6, padding: "32px 36px" }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.tx, marginBottom: 6 }}>CHOOSE A NEW PASSWORD</div>
+        <p style={{ color: C.ts, fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>Signed in as {props.email}. Pick a password you do not use anywhere else.</p>
+        <form onSubmit={submit}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={AUTH_LABEL}>NEW PASSWORD</label>
+            <input type="password" required minLength={PW.password.MIN} autoComplete="new-password" value={pw} onChange={function(e) { setPw(e.target.value); }} placeholder="••••••••" style={AUTH_INPUT} />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={AUTH_LABEL}>CONFIRM NEW PASSWORD</label>
+            <input type="password" required minLength={PW.password.MIN} autoComplete="new-password" value={pw2} onChange={function(e) { setPw2(e.target.value); }} placeholder="••••••••" style={AUTH_INPUT} />
+          </div>
+          <p style={{ fontSize: 11, color: C.td, marginBottom: 18, lineHeight: 1.55 }}>At least {PW.password.MIN} characters — several words work well. Your other signed-in devices will be signed out.</p>
+          {err && <div role="alert" data-testid="auth-error" style={{ marginBottom: 14, padding: "9px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 4, color: "#f87171", fontSize: 12, lineHeight: 1.5 }}>{err}</div>}
+          <button type="submit" data-testid="auth-submit" disabled={busy} style={{ width: "100%", padding: "12px", background: busy ? C.bd : C.ac, border: "none", borderRadius: 4, color: busy ? C.td : "#000", fontWeight: 700, fontSize: 11, letterSpacing: 2, cursor: busy ? "not-allowed" : "pointer" }}>{busy ? "..." : "SAVE PASSWORD"}</button>
+          <button type="button" onClick={props.onCancel} style={{ width: "100%", marginTop: 10, padding: "10px", background: "transparent", border: "1px solid " + C.bd, borderRadius: 4, color: C.ts, fontSize: 10, letterSpacing: 1.5, cursor: "pointer" }}>CANCEL AND SIGN OUT</button>
+        </form>
       </div>
     </div>
   );
@@ -2443,13 +2703,20 @@ function LiveSetupView(props) {
 function App() {
   // Auth state — undefined = checking, null = not logged in, object = logged in
   var _user = useState(undefined); var user = _user[0]; var setUser = _user[1];
+  // true while the user, arriving from a password-reset e-mail, has to choose a new password
+  var _recovery = useState(false); var recovery = _recovery[0]; var setRecovery = _recovery[1];
   useEffect(function() {
     if (!window.sb) { setUser(null); return; }
-    // Restore session from Supabase (handles "remember-me" automatically)
+    // Restore session from Supabase (the session store follows "Remember me")
     window.sb.auth.getSession().then(function(res) {
-      setUser((res.data && res.data.session) ? res.data.session.user : null);
+      var sess = res.data && res.data.session;
+      setUser(sess ? sess.user : null);
+      if (sess && window.__PW_RECOVERY__) setRecovery(true);        // the page was opened from a reset e-mail
+      window.__PW_RECOVERY__ = false;
     });
     var sub = window.sb.auth.onAuthStateChange(function(_event, session) {
+      if (_event === "PASSWORD_RECOVERY") setRecovery(true);
+      if (!session) setRecovery(false);
       setUser(session ? session.user : null);
     });
     return function() { sub.data && sub.data.subscription && sub.data.subscription.unsubscribe(); };
@@ -2689,7 +2956,7 @@ function App() {
 
   function loadSetups() {
     if (!window.sb || !user) return;
-    window.sb.from("setups").select("*").neq("id", "__mods__").order("ts", { ascending: false })
+    window.sb.from("setups").select("*").neq("id", "__mods__").eq("user_id", user.id).order("ts", { ascending: false })
       .then(function(res) {
         if (res.error) { console.error("loadSetups:", res.error.message); return; }
         var rows = (res.data || []).map(function(r) { return r.data; }).filter(Boolean);
@@ -3543,13 +3810,16 @@ function App() {
     return category || "Custom";
   }
 
-  // Fase 1: Busca contexto RAG no Supabase (rag-retrieval Edge Function)
+  // Phase 1: fetch RAG context from Supabase (rag-retrieval Edge Function). The signed-in user's token is sent so the
+  // function can check who is asking; without a session nothing is sent.
   async function fetchRAGContext(query, gameKey, carClass, trackName, cond) {
     if (!window.SB_URL) return "";
     try {
+      var ragHeaders = await authHeaders();
+      if (!ragHeaders.Authorization) return "";
       var res = await fetch(window.SB_URL + "/functions/v1/rag-retrieval", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": window.SB_KEY },
+        headers: ragHeaders,
         body: JSON.stringify({
           query:     query,
           game:      gameKey    || "",
@@ -3803,7 +4073,7 @@ function App() {
               {teach.files.map(function(f, i) {
                 return (
                   <div key={i} style={{ position: "relative", width: 112, height: 70, border: "1px solid " + C.bd, borderRadius: 3, overflow: "hidden", background: "#000" }}>
-                    <img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <Pic src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     <button onClick={function() { setTeach(function(cur) { return Object.assign({}, cur, { files: cur.files.filter(function(x, j) { return j !== i; }), result: null }); }); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 12, lineHeight: 1, cursor: "pointer" }}>×</button>
                   </div>
                 );
@@ -3944,14 +4214,17 @@ function App() {
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Setup_" + s.track.replace(/\W/g, "_") + ".txt"; a.click();
   }
   function exportCsv(s) {
-    var csv = "Section,Parameter,Value\n"; var sec = "General";
+    var rows = [["Section", "Parameter", "Value"]]; var sec = "General";
     getSetupTxt(s.messages).split("\n").forEach(function(line) {
       var t = line.trim();
       if (t.startsWith("## ") || t.startsWith("# ")) sec = t.replace(/^#+\s*/, "");
-      else if (t.startsWith("|") && !t.includes("---")) { var cols = t.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, ""); }); if (cols.length >= 2) csv += '"' + sec + '","' + cols[0] + '","' + cols.slice(1).join(" | ") + '"\n'; }
-      else if (t.startsWith("- ") || t.startsWith("* ")) { var parts = t.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(":"); if (parts.length >= 2) csv += '"' + sec + '","' + parts[0].trim() + '","' + parts.slice(1).join(":").trim() + '"\n'; }
+      else if (t.startsWith("|") && !t.includes("---")) { var cols = t.split("|").filter(function(x) { return x.trim(); }).map(function(x) { return x.trim().replace(/\*\*/g, ""); }); if (cols.length >= 2) rows.push([sec, cols[0], cols.slice(1).join(" | ")]); }
+      else if (t.startsWith("- ") || t.startsWith("* ")) { var parts = t.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(":"); if (parts.length >= 2) rows.push([sec, parts[0].trim(), parts.slice(1).join(":").trim()]); }
     });
-    var blob = new Blob([csv], { type: "text/csv" }); var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Setup_" + s.track.replace(/\W/g, "_") + ".csv"; a.click();
+    // quotes doubled and formula-looking cells neutralised (PW.csv); BOM so spreadsheets read the degree sign correctly
+    var blob = new Blob(["\ufeff" + rows.map(PW.csv.row).join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" });
+    var a = document.createElement("a"); var url = URL.createObjectURL(blob); a.href = url; a.download = "Setup_" + s.track.replace(/\W/g, "_") + ".csv"; a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
   }
 
   function exportPdf(s, trackMapUrl) {
@@ -4317,7 +4590,7 @@ function App() {
           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, marginRight: isMobile ? 8 : 12, flexShrink: 0 }}>
             {!isMobile && <span className="pw-created-by-label" style={{ fontSize: 9, color: C.td, fontFamily: "'Chakra Petch',sans-serif", letterSpacing: 1, whiteSpace: "nowrap" }}>CREATED BY</span>}
             <a href="https://youtube.com/@bm3racing/videos?sub_confirmation=1" target="_blank" rel="noopener noreferrer" title="BM3 Racing" style={{ display: "flex", alignItems: "center", lineHeight: 0 }}>
-              <img src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 18 : 22, width: "auto", display: "block", maxWidth: isMobile ? 80 : 120 }} />
+              <Pic src="https://bmansano.github.io/pit-wall/Logo_Horizontal_BM3.png" alt="BM3 Racing" style={{ height: isMobile ? 18 : 22, width: "auto", display: "block", maxWidth: isMobile ? 80 : 120 }} />
             </a>
           </div>
 
@@ -4433,6 +4706,7 @@ function App() {
     </div>
   );
   if (!user) return <AuthScreen onLogin={function(u) { setUser(u); }} />;
+  if (recovery) return <NewPasswordScreen email={user.email} onDone={function() { setRecovery(false); setToast("Password updated"); }} onCancel={function() { setRecovery(false); window.sb.auth.signOut(); }} />;
 
   // ── APPROVAL GATE — blocks unapproved users ───────────────────────────────────
   if (!isAdmin) {
@@ -5506,7 +5780,7 @@ function App() {
                   </div>
                   <div style={{ borderRadius: 4, overflow: "hidden", border: "1px solid " + C.bd, background: "#0a0a0b", height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {(_mapLoading2 || uploadingTrack === selectedSetup.track) && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}><Loader /><span style={{ fontSize: 8, color: C.td, letterSpacing: 1 }}>{uploadingTrack === selectedSetup.track ? "PROCESSING" : "LOADING"}</span></div>}
-                    {!_mapLoading2 && uploadingTrack !== selectedSetup.track && _mapSvg && _mapSvg !== "NOT_FOUND" && <img src={_mapSvg} alt={selectedSetup.track} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", filter: _isCustomMap ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} />}
+                    {!_mapLoading2 && uploadingTrack !== selectedSetup.track && _mapSvg && _mapSvg !== "NOT_FOUND" && <Pic src={_mapSvg} alt={selectedSetup.track} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", filter: _isCustomMap ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} />}
                     {_mapSvg === "NOT_FOUND" && <span style={{ fontSize: 10, color: C.td }}>Not found — use ↑ UPLOAD</span>}
                     {!_mapSvg && !_mapLoading2 && uploadingTrack !== selectedSetup.track && <span style={{ fontSize: 10, color: C.td }}>Use ↑ UPLOAD ou WEB</span>}
                   </div>
@@ -5752,7 +6026,7 @@ function App() {
                   </div>
                   <div style={{ padding: "0 10px 10px" }}>
                     {(loading2 || isUploading) && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 6px", color: C.td, fontSize: 9, letterSpacing: 1 }}><Loader /><span>{isUploading ? "PROCESSING" : "SEARCHING CIRCUIT"}</span></div>}
-                    {!loading2 && !isUploading && displayUrl && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><img src={displayUrl} alt={mapTrack} style={{ width: "100%", height: "auto", display: "block", filter: isCustom ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
+                    {!loading2 && !isUploading && displayUrl && <div style={{ borderRadius: 3, overflow: "hidden", border: "1px solid " + C.bd, lineHeight: 0, background: "#0a0a0b" }}><Pic src={displayUrl} alt={mapTrack} style={{ width: "100%", height: "auto", display: "block", filter: isCustom ? "none" : "invert(1) sepia(1) saturate(8) hue-rotate(330deg) brightness(0.9)" }} /></div>}
                     {!loading2 && !isUploading && !displayUrl && wikimediaUrl === "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Not found. Use ↑ UPLOAD.</div>}
                     {!loading2 && !isUploading && !displayUrl && wikimediaUrl !== "NOT_FOUND" && <div style={{ padding: "10px 6px", color: C.td, fontSize: 11, textAlign: "center" }}>Use ↑ UPLOAD or WEB</div>}
                   </div>
