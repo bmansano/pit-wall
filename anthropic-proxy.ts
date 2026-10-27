@@ -203,7 +203,7 @@ function makeHandler(env: Env, doFetch: Fetch) {
     const u = await r.json();
     if (!isObj(u) || typeof u.id !== "string") return null;
     const email = String(u.email ?? "").toLowerCase();
-    const isAdmin = email !== "" && email === cfg.adminEmail;
+    const isAdmin = email !== "" && email === cfg.adminEmail && !!(u.email_confirmed_at || u.confirmed_at);   // an unverified address proves nothing
     let approved = isAdmin;
     if (!isAdmin) {
       const a = await doFetch(cfg.supabaseUrl + "/rest/v1/user_approvals?select=status&limit=1&user_id=eq." + encodeURIComponent(u.id), { headers: { ...auth, Accept: "application/json" } });
